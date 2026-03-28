@@ -150,3 +150,8 @@ The platform provides a centralized interface where multiple operational layers 
 - Bhavya Shri Vijayakumar (24BCE5372) 
 
 --- 
+
+## Deployment
+
+-  Delpoyed using Netlify
+-  
