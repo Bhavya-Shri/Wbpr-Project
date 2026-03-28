@@ -1,6 +1,6 @@
-# SENTINEL — Integrated Border Surveillance & Command Dashboard  
+# SENTINEL — Integrated Border Surveillance & Defense Dashboard  
 
-SENTINEL is a high-fidelity, browser-based **border monitoring and defence command system** designed for real-time surveillance, threat assessment, and tactical response operations.
+SENTINEL is a high-fidelity, browser-based **border monitoring and defence system** designed for real-time surveillance, threat assessment, and tactical response operations.
 
 The platform provides a centralized interface where multiple operational layers - intelligence, deployment, communication, and analytics — converge to support rapid decision-making in high-risk environments.
 
@@ -151,7 +151,13 @@ The platform provides a centralized interface where multiple operational layers 
 
 --- 
 
+## Login details for authentication page
+- Personnel ID: CMD123
+- Access Key: 654321
+
+---
+
 ## Deployment
 
 -  Delpoyed using Netlify
--  
+-  Netlify Link: https://sentinel-defense-dashboard.netlify.app/
