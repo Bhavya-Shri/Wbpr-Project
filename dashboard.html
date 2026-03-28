@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SENTINEL — Command Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --bg:#020b0e; --surface:#040f13; --panel:#071419;
+  --green:#00ff88; --green-dim:#00ff8840; --green-glow:#00ff8815;
+  --red:#ff2244; --red-dim:#ff224430;
+  --amber:#ffaa00; --amber-dim:#ffaa0030;
+  --cyan:#00d4ff; --cyan-dim:#00d4ff30;
+  --purple:#9b59ff;
+  --text:#a8c8b8; --text-dim:#3a5a48;
+  --border:#0d3025; --border2:#0a2018;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:'Share Tech Mono',monospace;
+  min-height:100vh; overflow-x:hidden;
+  cursor:crosshair;
+}
+body::before{
+  content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,136,0.015) 2px,rgba(0,255,136,0.015) 4px);
+  pointer-events:none;z-index:9999;
+}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);}
+
+body.emergency{--bg:#1a0005;--surface:#200008;--panel:#1c0006;--border:#660020;}
+body.emergency .top-bar{background:rgba(255,34,68,0.1);border-color:#660020;}
+body.emergency::after{
+  content:'⚠ EMERGENCY PROTOCOL ACTIVE ⚠';
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-family:'Orbitron',monospace;font-size:3rem;font-weight:900;
+  color:var(--red);opacity:0.06;white-space:nowrap;
+  pointer-events:none;z-index:9998;letter-spacing:0.1em;
+}
+
+/* TOP BAR */
+.top-bar{
+  position:sticky;top:0;z-index:500;
+  height:50px;background:rgba(4,15,19,0.97);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;gap:16px;
+  backdrop-filter:blur(20px);
+}
+.top-logo{
+  font-family:'Orbitron',monospace;font-size:1.1rem;font-weight:900;
+  color:var(--green);letter-spacing:0.3em;
+  text-shadow:0 0 20px var(--green);flex-shrink:0;
+}
+.top-nav{display:flex;gap:4px;}
+.nav-link{
+  padding:6px 14px;font-size:0.6rem;letter-spacing:0.12em;
+  color:var(--text-dim);text-transform:uppercase;
+  border:1px solid transparent;cursor:pointer;
+  transition:all 0.2s;text-decoration:none;
+}
+.nav-link:hover,.nav-link.active{
+  color:var(--green);border-color:var(--border);
+  background:var(--green-glow);
+}
+.top-status{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.status-pill{padding:4px 10px;font-size:0.58rem;letter-spacing:0.12em;border:1px solid;border-radius:2px;}
+.pill-green{border-color:var(--green);color:var(--green);background:rgba(0,255,136,0.08);}
+.pill-red{border-color:var(--red);color:var(--red);background:rgba(255,34,68,0.08);}
+.pill-amber{border-color:var(--amber);color:var(--amber);background:rgba(255,170,0,0.08);}
+#top-clock{font-family:'Orbitron',monospace;font-size:0.85rem;color:var(--green);}
+.role-badge{padding:4px 12px;background:rgba(255,34,68,0.12);border:1px solid rgba(255,34,68,0.4);font-size:0.58rem;letter-spacing:0.15em;color:var(--red);}
+.logout-btn{
+  padding:6px 16px;background:rgba(255,34,68,0.1);
+  border:1px solid rgba(255,34,68,0.5);
+  color:var(--red);font-size:0.62rem;letter-spacing:0.15em;
+  cursor:pointer;font-family:'Share Tech Mono',monospace;
+  text-transform:uppercase;transition:all 0.2s;text-decoration:none;
+  display:flex;align-items:center;gap:6px;
+}
+.logout-btn:hover{background:rgba(255,34,68,0.25);box-shadow:0 0 16px rgba(255,34,68,0.4);border-color:var(--red);}
+
+/* ALERT BANNER */
+.alert-banner{
+  background:rgba(255,34,68,0.08);border-bottom:1px solid var(--red);
+  display:flex;align-items:center;gap:12px;padding:8px 20px;
+  font-size:0.65rem;color:var(--red);letter-spacing:0.1em;
+  animation:alertpulse 1.5s ease-in-out infinite;
+}
+@keyframes alertpulse{0%,100%{opacity:1}50%{opacity:0.7}}
+.alert-close{margin-left:auto;cursor:pointer;font-size:1rem;opacity:0.6;}
+.alert-close:hover{opacity:1;}
+
+section{padding:24px 20px;}
+.section-header{
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:20px;padding-bottom:12px;
+  border-bottom:1px solid var(--border);
+}
+.section-title{
+  font-family:'Orbitron',monospace;font-size:0.85rem;
+  font-weight:700;color:var(--green);letter-spacing:0.2em;text-transform:uppercase;
+}
+.section-badge{padding:2px 8px;font-size:0.55rem;letter-spacing:0.1em;border:1px solid var(--border);color:var(--text-dim);}
+.section-line{flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent);}
+.section-nav-label{display:inline-flex;align-items:center;gap:8px;font-size:0.55rem;letter-spacing:0.2em;color:var(--text-dim);text-transform:uppercase;}
+.section-id{font-family:'Orbitron',monospace;font-size:0.65rem;color:var(--green);opacity:0.5;}
+
+/* STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:0;}
+.stat-card{background:var(--panel);border:1px solid var(--border);padding:16px;position:relative;overflow:hidden;transition:all 0.3s;}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.stat-card.green::before{background:linear-gradient(90deg,transparent,var(--green),transparent);}
+.stat-card.red::before{background:linear-gradient(90deg,transparent,var(--red),transparent);}
+.stat-card.amber::before{background:linear-gradient(90deg,transparent,var(--amber),transparent);}
+.stat-card.cyan::before{background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+.stat-label{font-size:0.55rem;letter-spacing:0.15em;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px;}
+.stat-value{font-family:'Orbitron',monospace;font-size:1.6rem;font-weight:700;line-height:1;transition:all 0.4s;}
+.stat-card.green .stat-value{color:var(--green);}
+.stat-card.red .stat-value{color:var(--red);}
+.stat-card.amber .stat-value{color:var(--amber);}
+.stat-card.cyan .stat-value{color:var(--cyan);}
+.stat-sub{font-size:0.55rem;color:var(--text-dim);margin-top:6px;}
+.stat-trend{font-size:0.6rem;position:absolute;top:14px;right:14px;}
+.stat-flash{animation:stat-pop 0.4s ease;}
+@keyframes stat-pop{0%{transform:scale(1.25)}100%{transform:scale(1)}}
+
+/* MAP */
+.map-layout{display:grid;grid-template-columns:220px 1fr 280px;gap:16px;}
+.map-controls{background:var(--panel);border:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:12px;}
+.ctrl-title{font-size:0.6rem;letter-spacing:0.2em;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px;}
+.sector-list{display:flex;flex-direction:column;gap:4px;}
+.sector-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 10px;background:rgba(0,255,136,0.03);
+  border:1px solid transparent;cursor:pointer;
+  transition:all 0.2s;font-size:0.65rem;
+}
+.sector-item:hover,.sector-item.active{border-color:var(--border);background:var(--green-glow);}
+.sector-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.sector-name{flex:1;margin-left:8px;color:var(--text);}
+.sector-threat{font-size:0.55rem;padding:2px 6px;border-radius:2px;}
+.threat-high{background:var(--red-dim);color:var(--red);}
+.threat-med{background:var(--amber-dim);color:var(--amber);}
+.threat-low{background:var(--green-dim);color:var(--green);}
+.view-toggles{display:flex;flex-direction:column;gap:4px;}
+.view-btn{
+  padding:8px;font-size:0.6rem;letter-spacing:0.1em;
+  background:transparent;border:1px solid var(--border);
+  color:var(--text-dim);cursor:pointer;text-transform:uppercase;
+  transition:all 0.2s;text-align:left;
+}
+.view-btn:hover,.view-btn.active{border-color:var(--green);color:var(--green);background:var(--green-glow);}
+
+/* LEAFLET MAP */
+.map-canvas-wrap{
+  position:relative;background:#020b0e;
+  border:1px solid var(--border);overflow:hidden;
+  min-height:520px;
+}
+#leaflet-india-map{width:100%;height:100%;position:absolute;top:0;left:0;z-index:1;}
+/* Real world map tiles - bright enough to see geography */
+#leaflet-india-map .leaflet-tile-pane{filter:brightness(0.75) saturate(0.4) hue-rotate(160deg) contrast(1.1);}
+#leaflet-india-map .leaflet-control-zoom a{background:var(--panel);border-color:var(--border);color:var(--green);font-family:'Share Tech Mono',monospace;}
+#leaflet-india-map .leaflet-control-attribution{background:rgba(4,15,19,0.7);color:var(--text-dim);font-size:8px;}
+.leaflet-popup-content-wrapper{background:rgba(4,15,19,0.97);border:1px solid var(--green);border-radius:0;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:0.65rem;box-shadow:0 0 20px rgba(0,255,136,0.3);}
+.leaflet-popup-tip{background:rgba(4,15,19,0.97);}
+.leaflet-popup-close-button{color:var(--green) !important;}
+.map-hud{
+  position:absolute;top:12px;left:12px;right:12px;
+  display:flex;justify-content:space-between;
+  pointer-events:none;z-index:10;
+}
+.map-hud-item{
+  background:rgba(4,15,19,0.85);border:1px solid var(--border);
+  padding:6px 12px;font-size:0.58rem;color:var(--text-dim);letter-spacing:0.1em;
+}
+.map-hud-item strong{color:var(--green);}
+.map-legend{
+  position:absolute;bottom:12px;left:12px;
+  background:rgba(4,15,19,0.85);border:1px solid var(--border);
+  padding:10px;font-size:0.58rem;z-index:10;
+}
+.legend-item{display:flex;align-items:center;gap:8px;margin-bottom:5px;color:var(--text-dim);}
+.legend-dot{width:10px;height:10px;border-radius:50%;}
+
+/* RIGHT ANALYTICS */
+.analytics-panel{background:var(--panel);border:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:12px;}
+.sector-intel-box{
+  font-size:0.65rem;color:var(--text);line-height:1.8;
+  padding:10px;background:rgba(0,255,136,0.03);border:1px solid var(--border);
+  flex:1;overflow-y:auto;max-height:200px;
+}
+.intel-entry{padding:6px 8px;margin-bottom:6px;border-left:2px solid var(--border);background:rgba(0,0,0,0.2);transition:all 0.3s;}
+.intel-entry.new-threat{border-left-color:var(--red);animation:intel-flash 0.6s ease 3;}
+.intel-entry.med-threat{border-left-color:var(--amber);}
+.intel-entry.low-threat{border-left-color:var(--green);}
+@keyframes intel-flash{0%,100%{background:rgba(0,0,0,0.2)}50%{background:rgba(255,34,68,0.1)}}
+.intel-time{font-size:0.55rem;color:var(--text-dim);}
+.intel-type{font-size:0.58rem;font-weight:700;}
+.intel-region{color:var(--cyan);font-size:0.58rem;}
+.quick-deploy-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.region-deploy-select{
+  width:100%;padding:6px 8px;
+  background:rgba(0,255,136,0.03);border:1px solid var(--border);
+  color:var(--green);font-family:'Share Tech Mono',monospace;
+  font-size:0.65rem;outline:none;cursor:pointer;margin-bottom:6px;
+}
+.region-deploy-select option{background:var(--bg);color:var(--text);}
+
+/* THREATS */
+.threats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;}
+.threat-card{background:var(--panel);border:1px solid var(--border);padding:16px;position:relative;cursor:pointer;transition:all 0.3s;}
+.threat-card:hover{border-color:var(--red);box-shadow:0 0 20px rgba(255,34,68,0.1);}
+.threat-card.level-high{border-left:3px solid var(--red);}
+.threat-card.level-med{border-left:3px solid var(--amber);}
+.threat-card.level-low{border-left:3px solid var(--green);}
+.threat-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.threat-type{font-family:'Orbitron',monospace;font-size:0.65rem;font-weight:700;letter-spacing:0.1em;}
+.threat-card.level-high .threat-type{color:var(--red);}
+.threat-card.level-med .threat-type{color:var(--amber);}
+.threat-card.level-low .threat-type{color:var(--green);}
+.threat-time{font-size:0.55rem;color:var(--text-dim);}
+.threat-desc{font-size:0.65rem;color:var(--text);margin-bottom:10px;line-height:1.6;}
+.threat-meta{display:flex;gap:12px;}
+.threat-meta-item{font-size:0.55rem;color:var(--text-dim);}
+.threat-meta-item strong{color:var(--text);}
+.confidence-bar{height:3px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden;}
+.confidence-fill{height:100%;border-radius:2px;transition:width 1s ease;}
+.threat-actions{display:flex;gap:6px;margin-top:10px;}
+.threat-btn{flex:1;padding:6px;font-size:0.55rem;letter-spacing:0.1em;background:transparent;border:1px solid;cursor:pointer;text-transform:uppercase;transition:all 0.2s;font-family:'Share Tech Mono',monospace;}
+.btn-deploy{border-color:var(--red);color:var(--red);}
+.btn-deploy:hover{background:var(--red-dim);}
+.btn-monitor{border-color:var(--border);color:var(--text-dim);}
+.btn-monitor:hover{border-color:var(--text-dim);color:var(--text);}
+.btn-dismiss{border-color:var(--border);color:var(--text-dim);}
+.blink-red{animation:blink-r 0.8s step-end infinite;}
+@keyframes blink-r{0%,100%{opacity:1}50%{opacity:0.2}}
+.threat-enter{animation:threat-in 0.5s ease;}
+@keyframes threat-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+.threats-empty{padding:40px;text-align:center;color:var(--green);font-size:0.75rem;letter-spacing:0.2em;opacity:0.6;}
+
+/* DEPLOYMENT */
+.deploy-layout{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+.deploy-builder{background:var(--panel);border:1px solid var(--border);padding:20px;}
+.deploy-title{font-size:0.6rem;letter-spacing:0.2em;color:var(--text-dim);text-transform:uppercase;margin-bottom:14px;}
+.deploy-field{margin-bottom:14px;}
+.deploy-label{font-size:0.6rem;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:6px;display:block;}
+.deploy-select,.deploy-input{
+  width:100%;padding:9px 12px;
+  background:rgba(0,255,136,0.03);border:1px solid var(--border);
+  color:var(--green);font-family:'Share Tech Mono',monospace;
+  font-size:0.75rem;outline:none;cursor:pointer;
+}
+.deploy-select:focus,.deploy-input:focus{border-color:var(--green);}
+.deploy-select option{background:var(--bg);color:var(--text);}
+.unit-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.unit-card{padding:10px;background:rgba(0,255,136,0.03);border:1px solid var(--border);cursor:pointer;transition:all 0.2s;text-align:center;}
+.unit-card:hover,.unit-card.selected{border-color:var(--green);background:var(--green-glow);}
+.unit-icon{font-size:1.4rem;display:block;margin-bottom:4px;}
+.unit-name{font-size:0.6rem;color:var(--text-dim);}
+.unit-card.selected .unit-name{color:var(--green);}
+.deploy-cta{
+  width:100%;padding:12px;background:transparent;border:2px solid var(--green);
+  color:var(--green);font-family:'Orbitron',monospace;font-size:0.7rem;font-weight:700;
+  letter-spacing:0.25em;cursor:pointer;transition:all 0.3s;text-transform:uppercase;
+}
+.deploy-cta:hover{background:rgba(0,255,136,0.1);box-shadow:0 0 20px rgba(0,255,136,0.3);}
+.deployment-list{background:var(--panel);border:1px solid var(--border);padding:16px;overflow-y:auto;max-height:420px;}
+.dep-item{padding:12px;border:1px solid var(--border);margin-bottom:8px;position:relative;}
+/* ONLY the single unit currently being deployed blinks amber — everything else is static */
+.dep-item.is-deploying{animation:deploying-blink 0.9s step-end infinite;}
+@keyframes deploying-blink{0%,49%{border-color:var(--amber);box-shadow:0 0 8px rgba(255,170,0,0.4)}50%,100%{border-color:var(--border);box-shadow:none}}
+.dep-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.dep-name{font-size:0.68rem;color:var(--green);}
+.dep-status{font-size:0.55rem;padding:2px 8px;}
+.dep-status.moving{background:var(--amber-dim);color:var(--amber);}
+.dep-status.arrived{background:var(--green-dim);color:var(--green);}
+.dep-status.standby{background:var(--cyan-dim);color:var(--cyan);}
+.dep-detail{font-size:0.58rem;color:var(--text-dim);margin-bottom:6px;}
+.dep-progress-wrap{display:flex;align-items:center;gap:8px;}
+.dep-bar{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.dep-bar-fill{height:100%;background:var(--amber);border-radius:2px;transition:width 0.3s;}
+.dep-status.arrived ~ .dep-progress-wrap .dep-bar-fill,.dep-arrived .dep-bar-fill{background:var(--green);}
+.dep-pct{font-size:0.55rem;color:var(--text-dim);}
+
+/* MISSION ANALYTICS */
+.probability-panel{background:var(--panel);border:1px solid var(--border);padding:16px;}
+.mission-stat-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border2);}
+.mission-stat-label{font-size:0.62rem;color:var(--text-dim);flex:1;}
+.mission-stat-bar-wrap{flex:2;}
+.mission-stat-bar{height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+.mission-stat-fill{height:100%;border-radius:3px;transition:width 1.2s ease;}
+.mission-fill-success{background:linear-gradient(90deg,var(--green),var(--cyan));}
+.mission-fill-risk{background:linear-gradient(90deg,var(--amber),var(--red));}
+.mission-stat-val{font-family:'Orbitron',monospace;font-size:0.7rem;font-weight:700;min-width:40px;text-align:right;transition:all 0.4s;}
+.mission-stat-chg{font-size:0.52rem;min-width:30px;text-align:right;}
+.chg-up{color:var(--green);}
+.chg-dn{color:var(--red);}
+.chg-flat{color:var(--text-dim);}
+
+/* AI PANEL */
+.ai-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.ai-engine{background:var(--panel);border:1px solid var(--border);padding:20px;}
+.ai-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.ai-indicator{width:10px;height:10px;border-radius:50%;background:var(--green);animation:ai-pulse 1.5s ease-in-out infinite;box-shadow:0 0 10px var(--green);}
+@keyframes ai-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.5);opacity:0.6}}
+.ai-title{font-family:'Orbitron',monospace;font-size:0.8rem;color:var(--green);letter-spacing:0.15em;}
+.ai-rec{background:rgba(0,255,136,0.04);border:1px solid var(--border);padding:14px;margin-bottom:10px;position:relative;transition:all 0.4s;}
+.ai-rec::before{content:'▸ AI';position:absolute;top:-8px;left:12px;background:var(--panel);padding:0 8px;font-size:0.55rem;color:var(--green);letter-spacing:0.1em;}
+.ai-rec-text{font-size:0.68rem;color:var(--text);line-height:1.7;margin-bottom:8px;}
+.ai-rec-actions{display:flex;gap:8px;}
+.ai-btn{padding:6px 14px;font-size:0.58rem;letter-spacing:0.1em;border:1px solid;cursor:pointer;background:transparent;text-transform:uppercase;font-family:'Share Tech Mono',monospace;transition:all 0.2s;}
+.ai-btn-accept{border-color:var(--green);color:var(--green);}
+.ai-btn-accept:hover{background:var(--green-dim);}
+.ai-btn-decline{border-color:var(--border);color:var(--text-dim);}
+.ai-btn-decline:hover{border-color:var(--text-dim);}
+.ai-confidence{display:flex;align-items:center;gap:8px;font-size:0.58rem;color:var(--text-dim);}
+.ai-conf-bar{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+.ai-conf-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--cyan));}
+.ai-rec-exit{animation:ai-exit 0.4s ease forwards;}
+@keyframes ai-exit{to{opacity:0;transform:translateX(30px);max-height:0;padding:0;margin:0;border:none;}}
+.ai-enter{animation:ai-enter-anim 0.5s ease;}
+@keyframes ai-enter-anim{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.prediction-grid{display:grid;grid-template-columns:1fr;gap:8px;}
+.pred-item{display:flex;align-items:center;gap:12px;padding:10px;background:rgba(0,212,255,0.03);border:1px solid var(--border);}
+.pred-icon{font-size:1.2rem;}
+.pred-text{flex:1;}
+.pred-label{font-size:0.62rem;color:var(--text);}
+.pred-sub{font-size:0.55rem;color:var(--text-dim);margin-top:2px;}
+.pred-risk{font-family:'Orbitron',monospace;font-size:0.75rem;font-weight:700;}
+.risk-high{color:var(--red);}
+.risk-med{color:var(--amber);}
+.risk-low{color:var(--green);}
+
+/* COMMS */
+.comms-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.comms-panel{background:var(--panel);border:1px solid var(--border);padding:16px;display:flex;flex-direction:column;}
+.chat-log{flex:1;overflow-y:auto;margin-bottom:12px;max-height:220px;display:flex;flex-direction:column;gap:8px;}
+.chat-msg{padding:8px 12px;font-size:0.65rem;line-height:1.5;border-left:2px solid;}
+.msg-alpha{border-color:var(--green);background:rgba(0,255,136,0.04);}
+.msg-bravo{border-color:var(--cyan);background:rgba(0,212,255,0.04);}
+.msg-cmd{border-color:var(--amber);background:rgba(255,170,0,0.04);}
+.msg-sys{border-color:var(--red);background:rgba(255,34,68,0.04);}
+.msg-sender{font-size:0.55rem;letter-spacing:0.1em;margin-bottom:3px;}
+.msg-alpha .msg-sender{color:var(--green);}
+.msg-bravo .msg-sender{color:var(--cyan);}
+.msg-cmd .msg-sender{color:var(--amber);}
+.msg-sys .msg-sender{color:var(--red);}
+.msg-time{color:var(--text-dim);}
+.chat-input-row{display:flex;gap:8px;}
+.chat-input{flex:1;padding:9px;background:rgba(0,255,136,0.03);border:1px solid var(--border);color:var(--green);font-family:'Share Tech Mono',monospace;font-size:0.7rem;outline:none;}
+.chat-input:focus{border-color:var(--green);}
+.chat-send{padding:9px 16px;background:transparent;border:1px solid var(--green);color:var(--green);font-family:'Share Tech Mono',monospace;font-size:0.65rem;cursor:pointer;letter-spacing:0.1em;transition:all 0.2s;}
+.chat-send:hover{background:var(--green-dim);}
+.broadcast-btns{display:flex;flex-direction:column;gap:8px;}
+.bcast-btn{padding:12px 16px;background:transparent;font-family:'Share Tech Mono',monospace;font-size:0.65rem;letter-spacing:0.12em;cursor:pointer;text-transform:uppercase;border:1px solid;transition:all 0.2s;text-align:left;}
+.bcast-all{border-color:var(--amber);color:var(--amber);}
+.bcast-all:hover{background:var(--amber-dim);box-shadow:0 0 15px rgba(255,170,0,0.2);}
+.bcast-emergency{border-color:var(--red);color:var(--red);}
+.bcast-emergency:hover{background:var(--red-dim);box-shadow:0 0 15px rgba(255,34,68,0.3);}
+.bcast-standby{border-color:var(--cyan);color:var(--cyan);}
+.bcast-standby:hover{background:var(--cyan-dim);}
+.bcast-silent{border-color:var(--border);color:var(--text-dim);}
+.bcast-silent:hover{border-color:var(--text-dim);}
+.bcast-output-wrap{margin-top:12px;}
+.bcast-output-title{font-size:0.58rem;letter-spacing:0.15em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;}
+.bcast-output-log{background:rgba(0,0,0,0.35);border:1px solid var(--border);max-height:160px;overflow-y:auto;}
+.bcast-log-entry{display:flex;gap:10px;align-items:flex-start;padding:7px 10px;border-bottom:1px solid var(--border2);animation:bcast-in 0.35s ease;font-size:0.6rem;}
+@keyframes bcast-in{from{opacity:0;background:rgba(0,255,136,0.08)}to{opacity:1;background:transparent}}
+.bcast-log-time{color:var(--text-dim);font-size:0.52rem;white-space:nowrap;padding-top:1px;}
+.bcast-log-type{font-size:0.52rem;padding:1px 7px;border:1px solid;white-space:nowrap;flex-shrink:0;}
+.bcast-type-all{border-color:var(--amber);color:var(--amber);}
+.bcast-type-emergency{border-color:var(--red);color:var(--red);}
+.bcast-type-standby{border-color:var(--cyan);color:var(--cyan);}
+.bcast-type-silent{border-color:var(--text-dim);color:var(--text-dim);}
+.bcast-type-channel{border-color:var(--green);color:var(--green);}
+.bcast-log-msg{color:var(--text);flex:1;line-height:1.4;}
+.channel-row{display:flex;align-items:center;padding:8px 10px;border:1px solid var(--border);margin-bottom:5px;cursor:pointer;transition:all 0.2s;}
+.channel-row:hover{border-color:var(--green);background:var(--green-glow);}
+.channel-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.ch-dot-blink{animation:ch-bl 1.4s ease-in-out infinite;}
+@keyframes ch-bl{0%,100%{opacity:1}50%{opacity:0.25}}
+.channel-name{font-size:0.62rem;color:var(--text);margin-left:8px;flex:1;}
+.channel-units{font-size:0.55rem;color:var(--text-dim);margin-right:8px;}
+.channel-badge{font-size:0.5rem;padding:2px 7px;border:1px solid;}
+.ch-secure{border-color:var(--green);color:var(--green);}
+.ch-standby{border-color:var(--amber);color:var(--amber);}
+.ch-encrypted{border-color:var(--cyan);color:var(--cyan);}
+
+/* ANALYTICS */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+.chart-box{background:var(--panel);border:1px solid var(--border);padding:16px;}
+.chart-title{font-size:0.6rem;letter-spacing:0.15em;color:var(--text-dim);text-transform:uppercase;margin-bottom:12px;}
+.chart-box canvas{max-height:200px;}
+
+/* ENVIRONMENT */
+.env-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.env-card{background:var(--panel);border:1px solid var(--border);padding:20px;text-align:center;}
+.env-icon{font-size:2.4rem;margin-bottom:8px;display:block;}
+.env-label{font-size:0.58rem;letter-spacing:0.15em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;}
+.env-value{font-family:'Orbitron',monospace;font-size:1.3rem;font-weight:700;color:var(--cyan);}
+.env-sub{font-size:0.58rem;color:var(--text-dim);margin-top:4px;}
+.env-impact{font-size:0.6rem;padding:4px 8px;margin-top:8px;display:inline-block;}
+.impact-warn{background:var(--amber-dim);color:var(--amber);}
+.impact-ok{background:var(--green-dim);color:var(--green);}
+.impact-high{background:var(--red-dim);color:var(--red);}
+
+/* CYBER */
+.cyber-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.cyber-card{background:var(--panel);border:1px solid var(--border);padding:16px;}
+.cyber-title{font-size:0.58rem;letter-spacing:0.15em;color:var(--text-dim);text-transform:uppercase;margin-bottom:10px;}
+.integrity-ring{width:90px;height:90px;margin:0 auto 12px;position:relative;display:flex;align-items:center;justify-content:center;}
+.integrity-ring svg{position:absolute;inset:0;transform:rotate(-90deg);}
+.integrity-ring .ring-bg{fill:none;stroke:var(--border);stroke-width:6;}
+.integrity-ring .ring-fill{fill:none;stroke-width:6;stroke-linecap:round;stroke-dasharray:251;transition:stroke-dashoffset 1s ease;}
+.ring-pct{font-family:'Orbitron',monospace;font-size:1.1rem;font-weight:700;z-index:1;}
+.hack-log{font-size:0.58rem;color:var(--text-dim);line-height:2;}
+.hack-log .blocked{color:var(--red);}
+.hack-log .stopped{color:var(--amber);}
+
+/* ACTIVITY LOG */
+.log-wrap{background:var(--panel);border:1px solid var(--border);max-height:320px;overflow-y:auto;}
+.log-filters{display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.log-filter{padding:4px 12px;font-size:0.58rem;letter-spacing:0.1em;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;transition:all 0.2s;text-transform:uppercase;background:transparent;font-family:'Share Tech Mono',monospace;}
+.log-filter.active,.log-filter:hover{border-color:var(--green);color:var(--green);background:var(--green-glow);}
+.log-entry{display:grid;grid-template-columns:100px 80px 100px 1fr 80px;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border2);font-size:0.62rem;transition:background 0.2s;}
+.log-entry:hover{background:rgba(0,255,136,0.02);}
+.log-time{color:var(--text-dim);}
+.log-type{padding:2px 8px;border-radius:2px;font-size:0.55rem;text-align:center;letter-spacing:0.05em;}
+.type-deploy{background:rgba(0,212,255,0.15);color:var(--cyan);}
+.type-alert{background:rgba(255,34,68,0.15);color:var(--red);}
+.type-patrol{background:rgba(0,255,136,0.15);color:var(--green);}
+.type-system{background:rgba(255,170,0,0.15);color:var(--amber);}
+.log-sector{color:var(--text-dim);}
+.log-desc{color:var(--text);}
+.log-by{color:var(--text-dim);font-size:0.55rem;}
+
+/* EMERGENCY BTN */
+.emergency-btn{
+  position:fixed;bottom:20px;right:20px;z-index:600;
+  padding:14px 20px;background:rgba(255,34,68,0.1);
+  border:2px solid var(--red);color:var(--red);
+  font-family:'Orbitron',monospace;font-size:0.65rem;font-weight:700;
+  letter-spacing:0.2em;cursor:pointer;
+  animation:em-pulse 2s ease-in-out infinite;transition:all 0.3s;
+}
+.emergency-btn:hover{background:rgba(255,34,68,0.25);box-shadow:0 0 30px rgba(255,34,68,0.4);}
+@keyframes em-pulse{0%,100%{box-shadow:0 0 10px rgba(255,34,68,0.3)}50%{box-shadow:0 0 25px rgba(255,34,68,0.6)}}
+
+/* TICKER */
+.bottom-ticker{background:rgba(4,15,19,0.97);border-top:1px solid var(--border);height:32px;display:flex;align-items:center;position:sticky;bottom:0;z-index:400;}
+.ticker-label{padding:0 16px;font-size:0.58rem;color:var(--amber);letter-spacing:0.15em;white-space:nowrap;border-right:1px solid var(--border);flex-shrink:0;}
+.ticker-track{flex:1;overflow:hidden;}
+.ticker-content{display:flex;gap:60px;animation:tickmove 35s linear infinite;white-space:nowrap;font-size:0.58rem;color:var(--text-dim);letter-spacing:0.08em;}
+@keyframes tickmove{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* TOAST */
+.toast{
+  position:fixed;top:70px;right:20px;z-index:700;
+  background:var(--panel);border:1px solid var(--green);
+  padding:12px 16px;font-size:0.65rem;color:var(--green);
+  max-width:320px;letter-spacing:0.08em;line-height:1.5;
+  transform:translateX(380px);transition:transform 0.3s;
+  box-shadow:0 0 20px rgba(0,255,136,0.2);
+}
+.toast.show{transform:translateX(0);}
+.toast.warn{border-color:var(--amber);color:var(--amber);box-shadow:0 0 20px rgba(255,170,0,0.2);}
+.toast.danger{border-color:var(--red);color:var(--red);box-shadow:0 0 20px rgba(255,34,68,0.3);}
+
+.grid-bg{position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(var(--border2) 1px,transparent 1px),linear-gradient(90deg,var(--border2) 1px,transparent 1px);
+  background-size:60px 60px;opacity:0.5;}
+main{position:relative;z-index:1;}
+.reveal{opacity:0;transform:translateY(20px);transition:opacity 0.6s ease,transform 0.6s ease;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+
+/* Custom army marker tooltip */
+.army-marker-wrap{cursor:pointer;}
+.army-tooltip{
+  background:rgba(4,15,19,0.97);border:1px solid var(--green);
+  padding:8px 12px;font-size:0.6rem;color:var(--text);
+  line-height:1.8;min-width:170px;
+  font-family:'Share Tech Mono',monospace;
+  box-shadow:0 0 18px rgba(0,255,136,0.25);
+}
+.army-tooltip b{color:var(--green);}
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="toast" id="toast"></div>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="top-logo">⬡ SENTINEL</div>
+  <nav class="top-nav">
+    <a class="nav-link active" href="#overview">Overview</a>
+    <a class="nav-link" href="#map">Map</a>
+    <a class="nav-link" href="#threats">Threats</a>
+    <a class="nav-link" href="#deploy">Deploy</a>
+    <a class="nav-link" href="#ai">AI Intel</a>
+    <a class="nav-link" href="#comms">Comms</a>
+    <a class="nav-link" href="#analytics">Analytics</a>
+    <a class="nav-link" href="#environment">Environment</a>
+    <a class="nav-link" href="#cyber">Cyber</a>
+    <a class="nav-link" href="#log">Activity Log</a>
+  </nav>
+  <div class="top-status">
+    <span class="status-pill pill-red blink">● THREAT: HIGH</span>
+    <span class="status-pill pill-green">● SYSTEMS NOMINAL</span>
+    <span class="role-badge">SR. COMMANDER</span>
+    <span id="top-clock">00:00:00</span>
+    <a class="logout-btn" href="login.html" onclick="return confirmLogout()">⏻ LOGOUT</a>
+  </div>
+</div>
+
+<!-- ALERT BANNER -->
+<div class="alert-banner" id="alert-banner">
+  <span class="blink-red">▶▶</span>
+  <span id="alert-text">ACTIVE ALERT — INTRUSION DETECTED IN SECTOR 7 (LADAKH BORDER) · CONFIDENCE: 94% · RAPID RESPONSE DEPLOYED · ETA 8 MIN</span>
+  <span class="alert-close" onclick="document.getElementById('alert-banner').style.display='none'">✕</span>
+</div>
+
+<main>
+
+<!-- SECTION 01: OVERVIEW -->
+<section id="overview" class="reveal">
+  <div class="section-header">
+    <span class="section-id">01</span>
+    <span class="section-title">Command Overview</span>
+    <span class="section-badge">LIVE DATA</span>
+    <div class="section-line"></div>
+    <span class="section-nav-label">Updated <span id="last-update" style="color:var(--green);margin-left:4px">0s ago</span></span>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card green">
+      <div class="stat-label">Active Personnel</div>
+      <div class="stat-value" id="stat-personnel">4,827</div>
+      <div class="stat-sub" id="stat-personnel-sub">↑ 142 on standby alert</div>
+      <div class="stat-trend" style="color:var(--green)">▲ 3%</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">Active Threats</div>
+      <div class="stat-value" id="stat-threats">7</div>
+      <div class="stat-sub" id="stat-threats-sub">3 HIGH · 3 MEDIUM · 1 LOW</div>
+      <div class="stat-trend blink-red" style="color:var(--red)" id="stat-threats-trend">▲ CRITICAL</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-label">Units Deployed</div>
+      <div class="stat-value" id="stat-deployed">23</div>
+      <div class="stat-sub" id="stat-deployed-sub">8 in transit · 15 on position</div>
+      <div class="stat-trend" id="stat-deployed-trend" style="color:var(--amber)">↔ STABLE</div>
+    </div>
+    <div class="stat-card cyan">
+      <div class="stat-label">Drones Active</div>
+      <div class="stat-value" id="stat-drones">46</div>
+      <div class="stat-sub" id="stat-drones-sub">31 recon · 15 strike-ready</div>
+      <div class="stat-trend" style="color:var(--cyan)">▲ 6%</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Sectors Monitored</div>
+      <div class="stat-value">18</div>
+      <div class="stat-sub">Full border coverage</div>
+      <div class="stat-trend" style="color:var(--green)">● ONLINE</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-label">Mission Success</div>
+      <div class="stat-value" id="stat-mission">97%</div>
+      <div class="stat-sub">Last 30-day average</div>
+      <div class="stat-trend" style="color:var(--green)">▲ +2%</div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 02: MAP -->
+<section id="map" class="reveal">
+  <div class="section-header">
+    <span class="section-id">02</span>
+    <span class="section-title">Interactive Border Map</span>
+    <span class="section-badge">LIVE TRACKING</span>
+    <div class="section-line"></div>
+    <span class="section-nav-label">India Border Regions · Real-time Units · Threat Overlay</span>
+  </div>
+  <div class="map-layout">
+    <!-- Left Controls -->
+    <div class="map-controls">
+      <div>
+        <div class="ctrl-title">▸ Border Sectors</div>
+        <div class="sector-list" id="sector-list">
+          <div class="sector-item active" onclick="selectSector(this,'Ladakh')"><span class="sector-dot" style="background:var(--red)"></span><span class="sector-name">Ladakh</span><span class="sector-threat threat-high">HIGH</span></div>
+          <div class="sector-item" onclick="selectSector(this,'Kashmir')"><span class="sector-dot" style="background:var(--red)"></span><span class="sector-name">Kashmir Valley</span><span class="sector-threat threat-high">HIGH</span></div>
+          <div class="sector-item" onclick="selectSector(this,'Uttarakhand')"><span class="sector-dot" style="background:var(--amber)"></span><span class="sector-name">Uttarakhand</span><span class="sector-threat threat-med">MED</span></div>
+          <div class="sector-item" onclick="selectSector(this,'Punjab')"><span class="sector-dot" style="background:var(--amber)"></span><span class="sector-name">Punjab Border</span><span class="sector-threat threat-med">MED</span></div>
+          <div class="sector-item" onclick="selectSector(this,'Rajasthan')"><span class="sector-dot" style="background:var(--green)"></span><span class="sector-name">Rajasthan</span><span class="sector-threat threat-low">LOW</span></div>
+          <div class="sector-item" onclick="selectSector(this,'Arunachal')"><span class="sector-dot" style="background:var(--green)"></span><span class="sector-name">Arunachal</span><span class="sector-threat threat-low">LOW</span></div>
+          <div class="sector-item" onclick="selectSector(this,'Sikkim')"><span class="sector-dot" style="background:var(--green)"></span><span class="sector-name">Sikkim</span><span class="sector-threat threat-low">LOW</span></div>
+          <div class="sector-item" onclick="selectSector(this,'Gujarat')"><span class="sector-dot" style="background:var(--amber)"></span><span class="sector-name">Gujarat Border</span><span class="sector-threat threat-med">MED</span></div>
+          <div class="sector-item" onclick="selectSector(this,'Manipur')"><span class="sector-dot" style="background:var(--green)"></span><span class="sector-name">Manipur</span><span class="sector-threat threat-low">LOW</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="ctrl-title" style="margin-top:12px">▸ Map View</div>
+        <div class="view-toggles">
+          <button class="view-btn active" onclick="setMapView(this,'streets')">⊞ Streets (Default)</button>
+          <button class="view-btn" onclick="setMapView(this,'satellite')">🛰 Satellite</button>
+          <button class="view-btn" onclick="setMapView(this,'terrain')">⛰ Terrain Relief</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaflet Map -->
+    <div class="map-canvas-wrap" id="mapWrap" style="min-height:520px;">
+      <div id="leaflet-india-map"></div>
+      <div class="map-hud">
+        <div class="map-hud-item">SECTOR: <strong id="active-sector">LADAKH</strong></div>
+        <div class="map-hud-item">VIEW: <strong id="active-view">STREETS</strong></div>
+        <div class="map-hud-item">UNITS: <strong style="color:var(--green)" id="hud-units">23 ACTIVE</strong></div>
+        <div class="map-hud-item">THREATS: <strong style="color:var(--red)" id="hud-threats">7 DETECTED</strong></div>
+      </div>
+      <div class="map-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Infantry</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Threat Zone</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cyan)"></div>Drone</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>Armoured</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div>Artillery</div>
+      </div>
+    </div>
+
+    <!-- Right Analytics -->
+    <div class="analytics-panel">
+      <div>
+        <div class="ctrl-title">▸ Sector Intelligence <span style="color:var(--red);font-size:0.55rem" class="blink-red">● LIVE</span></div>
+        <div class="sector-intel-box" id="sector-intel"></div>
+      </div>
+      <div>
+        <div class="ctrl-title" style="margin-top:8px">▸ Quick Deploy</div>
+        <select class="region-deploy-select" id="deploy-region">
+          <option value="Ladakh">Ladakh</option>
+          <option value="Kashmir">Kashmir Valley</option>
+          <option value="Punjab">Punjab Border</option>
+          <option value="Rajasthan">Rajasthan</option>
+          <option value="Uttarakhand">Uttarakhand</option>
+          <option value="Arunachal">Arunachal Pradesh</option>
+          <option value="Sikkim">Sikkim</option>
+          <option value="Gujarat">Gujarat Border</option>
+          <option value="Manipur">Manipur</option>
+        </select>
+        <div class="quick-deploy-grid">
+          <button class="view-btn" onclick="quickDeploy('Infantry')">🪖 Infantry</button>
+          <button class="view-btn" onclick="quickDeploy('Drone')">🚁 Drone</button>
+          <button class="view-btn" onclick="quickDeploy('Sniper')">🎯 Sniper</button>
+          <button class="view-btn" onclick="quickDeploy('Armour')">⚙ Armour</button>
+          <button class="view-btn" onclick="quickDeploy('Medic')">💊 Medic</button>
+          <button class="view-btn" onclick="quickDeploy('Artillery')">💣 Artillery</button>
+        </div>
+      </div>
+      <div>
+        <div class="ctrl-title" style="margin-top:8px">▸ Threat Distribution</div>
+        <canvas id="miniThreatChart" style="max-height:120px"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 03: THREATS -->
+<section id="threats" class="reveal">
+  <div class="section-header">
+    <span class="section-id">03</span>
+    <span class="section-title">Threat Detection System</span>
+    <span class="section-badge">AUTO-SCAN ACTIVE</span>
+    <div class="section-line"></div>
+    <span class="section-nav-label blink-red" style="color:var(--red)">● LIVE THREATS UPDATING</span>
+  </div>
+  <div class="threats-grid" id="threats-grid"></div>
+</section>
+
+<!-- SECTION 04: DEPLOYMENT -->
+<section id="deploy" class="reveal">
+  <div class="section-header">
+    <span class="section-id">04</span>
+    <span class="section-title">Troop Deployment Command</span>
+    <span class="section-badge">REAL-TIME DISPATCH</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="deploy-layout">
+    <div class="deploy-builder">
+      <div class="deploy-title">▸ Configure Deployment</div>
+      <div class="deploy-field">
+        <label class="deploy-label">Target Sector</label>
+        <select class="deploy-select" id="dep-sector">
+          <option>Ladakh — THREAT: HIGH</option>
+          <option>Kashmir Valley — THREAT: HIGH</option>
+          <option>Uttarakhand — THREAT: MED</option>
+          <option>Punjab Border — THREAT: MED</option>
+          <option>Rajasthan — THREAT: LOW</option>
+          <option>Arunachal — THREAT: LOW</option>
+          <option>Sikkim — THREAT: LOW</option>
+          <option>Gujarat Border — THREAT: MED</option>
+          <option>Manipur — THREAT: LOW</option>
+          <option>Nagaland — THREAT: LOW</option>
+          <option>West Bengal Border — THREAT: LOW</option>
+          <option>Himachal Pradesh — THREAT: LOW</option>
+        </select>
+      </div>
+      <div class="deploy-field">
+        <label class="deploy-label">Unit Type</label>
+        <div class="unit-grid" id="unit-grid">
+          <div class="unit-card selected" onclick="selectUnit(this)"><span class="unit-icon">🪖</span><div class="unit-name">Infantry</div></div>
+          <div class="unit-card" onclick="selectUnit(this)"><span class="unit-icon">🎯</span><div class="unit-name">Sniper Unit</div></div>
+          <div class="unit-card" onclick="selectUnit(this)"><span class="unit-icon">🚁</span><div class="unit-name">Drone Squad</div></div>
+          <div class="unit-card" onclick="selectUnit(this)"><span class="unit-icon">⚙</span><div class="unit-name">Armoured</div></div>
+          <div class="unit-card" onclick="selectUnit(this)"><span class="unit-icon">💊</span><div class="unit-name">Medic Team</div></div>
+          <div class="unit-card" onclick="selectUnit(this)"><span class="unit-icon">📡</span><div class="unit-name">Signals Unit</div></div>
+        </div>
+      </div>
+      <div class="deploy-field">
+        <label class="deploy-label">Unit Count</label>
+        <input class="deploy-input" id="dep-count" type="number" value="5" min="1" max="50"/>
+      </div>
+      <button class="deploy-cta" onclick="deployUnits()">⬡ AUTHORIZE DEPLOYMENT</button>
+    </div>
+    <div class="deployment-list">
+      <div class="deploy-title" style="margin-bottom:12px;">▸ Active Deployments (<span id="dep-count-display">4</span>) <span style="font-size:0.5rem;color:var(--green);margin-left:6px">● ON-STATION BLINK</span></div>
+      <div id="dep-list"></div>
+    </div>
+    <div class="probability-panel">
+      <div class="deploy-title" style="margin-bottom:12px;">▸ Mission Analytics <span style="color:var(--green);font-size:0.5rem" class="blink-red">● LIVE</span></div>
+      <div id="mission-analytics-rows"></div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 05: AI INTEL -->
+<section id="ai" class="reveal">
+  <div class="section-header">
+    <span class="section-id">05</span>
+    <span class="section-title">AI Command Intelligence</span>
+    <span class="section-badge">NEURAL ENGINE V4</span>
+    <div class="section-line"></div>
+    <span class="section-nav-label">Predictive Analysis · Auto-recommendations · Actions remove &amp; replace</span>
+  </div>
+  <div class="ai-layout">
+    <div class="ai-engine">
+      <div class="ai-header">
+        <div class="ai-indicator"></div>
+        <span class="ai-title">SENTINEL-AI ENGINE</span>
+      </div>
+      <div id="ai-rec-container">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+    <div class="ai-engine">
+      <div class="ai-header">
+        <div class="ai-indicator" style="background:var(--cyan);box-shadow:0 0 10px var(--cyan)"></div>
+        <span class="ai-title" style="color:var(--cyan)">THREAT PREDICTIONS</span>
+      </div>
+      <div class="prediction-grid">
+        <div class="pred-item">
+          <span class="pred-icon">🔴</span>
+          <div class="pred-text"><div class="pred-label">Sector 7 — High probability incursion</div><div class="pred-sub">Next 2h window · Based on pattern analysis</div></div>
+          <div class="pred-risk risk-high">HIGH</div>
+        </div>
+        <div class="pred-item">
+          <span class="pred-icon">🟡</span>
+          <div class="pred-text"><div class="pred-label">Cyber probe — Network Layer 3</div><div class="pred-sub">Anomalous packet pattern · Origin masked</div></div>
+          <div class="pred-risk risk-med">MED</div>
+        </div>
+        <div class="pred-item">
+          <span class="pred-icon">🟢</span>
+          <div class="pred-text"><div class="pred-label">Patrol Route BRAVO-4 — All Clear</div><div class="pred-sub">No anomalous activity predicted · 24h window</div></div>
+          <div class="pred-risk risk-low">LOW</div>
+        </div>
+        <div class="pred-item">
+          <span class="pred-icon">🔴</span>
+          <div class="pred-text"><div class="pred-label">Sector 12 — Drone Swarm Possible</div><div class="pred-sub">Thermal signature anomaly 2km north</div></div>
+          <div class="pred-risk risk-high">HIGH</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 06: COMMS -->
+<section id="comms" class="reveal">
+  <div class="section-header">
+    <span class="section-id">06</span>
+    <span class="section-title">Secure Communications</span>
+    <span class="section-badge">AES-256 ENCRYPTED</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="comms-layout">
+    <div class="comms-panel">
+      <div class="deploy-title" style="margin-bottom:10px">▸ Field Unit Chat</div>
+      <div class="chat-log" id="chat-log">
+        <div class="chat-msg msg-alpha"><div class="msg-sender">UNIT ALPHA-7 <span class="msg-time">· 11:42 UTC</span></div>Sector 7 patrol complete. No contacts. Resuming to POST-ALPHA. Over.</div>
+        <div class="chat-msg msg-cmd"><div class="msg-sender">CMD CENTER <span class="msg-time">· 11:44 UTC</span></div>Roger Alpha-7. Threat level elevated. Stay on high alert. Reinforcements en route. Out.</div>
+        <div class="chat-msg msg-bravo"><div class="msg-sender">UNIT BRAVO-3 <span class="msg-time">· 11:51 UTC</span></div>Visual on 3 suspects crossing grid 31.2N. Awaiting authorization to engage. Over.</div>
+        <div class="chat-msg msg-sys"><div class="msg-sender">SYSTEM ALERT <span class="msg-time">· 11:52 UTC</span></div>⚠ Drone Unit D-7 entering Sector 7 airspace. ETA target zone: 6 minutes.</div>
+      </div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chat-input" placeholder="▸ Transmit secure message..." onkeydown="if(event.key==='Enter')sendChat()"/>
+        <button class="chat-send" onclick="sendChat()">SEND ▶</button>
+      </div>
+    </div>
+    <div class="comms-panel">
+      <div class="deploy-title" style="margin-bottom:10px">▸ Broadcast Commands</div>
+      <div class="broadcast-btns">
+        <button class="bcast-btn bcast-all" onclick="broadcastCmd('all','📣 BROADCAST TO ALL UNITS','Broadcast issued to all active units across all sectors')">📣 BROADCAST TO ALL UNITS</button>
+        <button class="bcast-btn bcast-emergency" onclick="broadcastCmd('emergency','🚨 EMERGENCY ALERT — ALL FORCES','Emergency alert pushed to all forces. DEFCON elevated.')">🚨 EMERGENCY ALERT — ALL FORCES</button>
+        <button class="bcast-btn bcast-standby" onclick="broadcastCmd('standby','⏸ STANDBY ORDER — ALL SECTORS','All sectors ordered to standby. Hold positions.')">⏸ ORDER STANDBY — ALL SECTORS</button>
+        <button class="bcast-btn bcast-silent" onclick="broadcastCmd('silent','🔕 SILENT PROTOCOL ACTIVATED','Radio silence protocol activated. Encoded comms only.')">🔕 ACTIVATE SILENT PROTOCOL</button>
+      </div>
+      <div class="bcast-output-wrap">
+        <div class="bcast-output-title">▸ Broadcast Output Log <span style="color:var(--green);margin-left:4px" class="blink-red">● LIVE</span></div>
+        <div class="bcast-output-log" id="bcast-output-log">
+          <div style="padding:16px;text-align:center;color:var(--text-dim);font-size:0.58rem;letter-spacing:0.1em;">Awaiting broadcast commands...</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <div class="deploy-title" style="margin-bottom:8px">▸ Active Channels</div>
+        <div class="channel-row" onclick="broadcastCmd('channel','📡 ALPHA NET — Direct channel','Transmitting on ALPHA NET — 12 units online')">
+          <span class="channel-dot ch-dot-blink" style="background:var(--green)"></span>
+          <span class="channel-name">ALPHA NET</span>
+          <span class="channel-units">12 units</span>
+          <span class="channel-badge ch-secure">SECURE</span>
+        </div>
+        <div class="channel-row" onclick="broadcastCmd('channel','📡 BRAVO NET — Direct channel','Transmitting on BRAVO NET — 8 units online')">
+          <span class="channel-dot ch-dot-blink" style="background:var(--cyan);animation-delay:0.3s"></span>
+          <span class="channel-name">BRAVO NET</span>
+          <span class="channel-units">8 units</span>
+          <span class="channel-badge ch-encrypted">ENCRYPTED</span>
+        </div>
+        <div class="channel-row" onclick="broadcastCmd('channel','📡 CMD NET — Command channel','Transmitting on CMD NET — 4 posts active')">
+          <span class="channel-dot ch-dot-blink" style="background:var(--amber);animation-delay:0.6s"></span>
+          <span class="channel-name">CMD NET</span>
+          <span class="channel-units">4 posts</span>
+          <span class="channel-badge ch-encrypted">ENCRYPTED</span>
+        </div>
+        <div class="channel-row" onclick="broadcastCmd('emergency','🚨 EMERGENCY NET — Hot channel','Emergency NET activated — All forces alerted')">
+          <span class="channel-dot" style="background:var(--red);opacity:0.5"></span>
+          <span class="channel-name">EMERGENCY NET</span>
+          <span class="channel-units">STANDBY</span>
+          <span class="channel-badge ch-standby">READY</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 07: ANALYTICS -->
+<section id="analytics" class="reveal">
+  <div class="section-header">
+    <span class="section-id">07</span>
+    <span class="section-title">Analytics &amp; Intelligence Visualization</span>
+    <span class="section-badge">LIVE DYNAMIC CHARTS</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-box"><div class="chart-title">▸ Threat Frequency (7 Days — Live)</div><canvas id="threatChart"></canvas></div>
+    <div class="chart-box"><div class="chart-title">▸ Soldier Distribution by Sector</div><canvas id="soldierChart"></canvas></div>
+    <div class="chart-box"><div class="chart-title">▸ Alert Types Breakdown (Live)</div><canvas id="alertChart"></canvas></div>
+    <div class="chart-box"><div class="chart-title">▸ Mission Success Rate (Monthly)</div><canvas id="missionChart"></canvas></div>
+    <div class="chart-box"><div class="chart-title">▸ Deployment Response Time (min)</div><canvas id="responseChart"></canvas></div>
+    <div class="chart-box"><div class="chart-title">▸ Threat Level Over 24h (Live)</div><canvas id="threatLevelChart"></canvas></div>
+  </div>
+</section>
+
+<!-- SECTION 08: ENVIRONMENT -->
+<section id="environment" class="reveal">
+  <div class="section-header">
+    <span class="section-id">08</span>
+    <span class="section-title">Environment &amp; External Conditions</span>
+    <span class="section-badge">SENSOR FEED LIVE</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="env-grid">
+    <div class="env-card"><span class="env-icon">🌡</span><div class="env-label">Temperature — Ladakh</div><div class="env-value">-4°C</div><div class="env-sub">Feels like -11°C · Wind 32 km/h</div><span class="env-impact impact-warn">⚠ REDUCES VISIBILITY</span></div>
+    <div class="env-card"><span class="env-icon">👁</span><div class="env-label">Visibility</div><div class="env-value">1.2 KM</div><div class="env-sub">Fog advisory active · Kashmir</div><span class="env-impact impact-high">🔴 HIGH THREAT RISK</span></div>
+    <div class="env-card"><span class="env-icon">🌙</span><div class="env-label">Time of Day</div><div class="env-value" id="env-tod">DAY</div><div class="env-sub">Sunset: 18:42 UTC</div><span class="env-impact impact-ok">✓ GOOD VISIBILITY</span></div>
+    <div class="env-card"><span class="env-icon">❄</span><div class="env-label">Snow / Ice Alert</div><div class="env-value">ACTIVE</div><div class="env-sub">Heavy snowfall predicted · 16:00 UTC</div><span class="env-impact impact-warn">⚠ VEHICLE MOBILITY ↓</span></div>
+    <div class="env-card"><span class="env-icon">💨</span><div class="env-label">Wind Speed</div><div class="env-value">42 km/h</div><div class="env-sub">Gusts up to 68 km/h · NE direction</div><span class="env-impact impact-warn">⚠ DRONE OPERATIONS ↓</span></div>
+    <div class="env-card"><span class="env-icon">📡</span><div class="env-label">Signal Strength</div><div class="env-value">94%</div><div class="env-sub">Satellite uplink stable · 14 birds</div><span class="env-impact impact-ok">✓ FULL COMMS</span></div>
+    <div class="env-card"><span class="env-icon">🔆</span><div class="env-label">Solar Interference</div><div class="env-value">LOW</div><div class="env-sub">No solar flare activity detected</div><span class="env-impact impact-ok">✓ NO IMPACT</span></div>
+    <div class="env-card"><span class="env-icon">🌊</span><div class="env-label">Terrain Condition</div><div class="env-value">FROZEN</div><div class="env-sub">Ice layer on primary routes 4–7</div><span class="env-impact impact-high">🔴 MOBILITY RESTRICTED</span></div>
+  </div>
+</section>
+
+<!-- SECTION 09: CYBER -->
+<section id="cyber" class="reveal">
+  <div class="section-header">
+    <span class="section-id">09</span>
+    <span class="section-title">Cybersecurity Panel</span>
+    <span class="section-badge">FIREWALL ACTIVE</span>
+    <div class="section-line"></div>
+    <span class="section-nav-label blink-red" style="color:var(--amber)">● 3 INTRUSION ATTEMPTS BLOCKED TODAY</span>
+  </div>
+  <div class="cyber-grid">
+    <div class="cyber-card">
+      <div class="cyber-title">▸ System Integrity</div>
+      <div class="integrity-ring">
+        <svg viewBox="0 0 100 100"><circle class="ring-bg" cx="50" cy="50" r="40"/><circle class="ring-fill" cx="50" cy="50" r="40" stroke="var(--green)" style="stroke-dashoffset:25"/></svg>
+        <span class="ring-pct" style="color:var(--green)">99%</span>
+      </div>
+      <div style="text-align:center;font-size:0.6rem;color:var(--text-dim)">All systems nominal<br>Last scan: 2 min ago</div>
+    </div>
+    <div class="cyber-card">
+      <div class="cyber-title">▸ Firewall Status</div>
+      <div class="integrity-ring">
+        <svg viewBox="0 0 100 100"><circle class="ring-bg" cx="50" cy="50" r="40"/><circle class="ring-fill" cx="50" cy="50" r="40" stroke="var(--amber)" style="stroke-dashoffset:38"/></svg>
+        <span class="ring-pct" style="color:var(--amber)">85%</span>
+      </div>
+      <div style="text-align:center;font-size:0.6rem;color:var(--text-dim)">2 rules under review<br>Auto-patching active</div>
+    </div>
+    <div class="cyber-card">
+      <div class="cyber-title">▸ Encryption Coverage</div>
+      <div class="integrity-ring">
+        <svg viewBox="0 0 100 100"><circle class="ring-bg" cx="50" cy="50" r="40"/><circle class="ring-fill" cx="50" cy="50" r="40" stroke="var(--cyan)" style="stroke-dashoffset:3"/></svg>
+        <span class="ring-pct" style="color:var(--cyan)">99%</span>
+      </div>
+      <div style="text-align:center;font-size:0.6rem;color:var(--text-dim)">AES-256 + Quantum Layer<br>All comms encrypted</div>
+    </div>
+    <div class="cyber-card" style="grid-column:span 2">
+      <div class="cyber-title">▸ Intrusion Attempt Log</div>
+      <div class="hack-log">
+        <div>12:04 UTC · <span class="blocked">BLOCKED</span> · SQL Injection attempt on AUTH module · Origin: 203.88.x.x (Masked)</div>
+        <div>11:47 UTC · <span class="blocked">BLOCKED</span> · Port scan detected · 4,096 ports probed · Firewall auto-blocked</div>
+        <div>10:22 UTC · <span class="stopped">CONTAINED</span> · Phishing attempt intercepted · Personnel: UNIT-B3</div>
+        <div>09:15 UTC · <span class="blocked">BLOCKED</span> · DDoS spike: 48 Gbps · Mitigated by CDN layer</div>
+        <div>08:30 UTC · <span class="stopped">CONTAINED</span> · Malicious payload in email · Quarantined successfully</div>
+      </div>
+    </div>
+    <div class="cyber-card">
+      <div class="cyber-title">▸ Network Traffic (Live)</div>
+      <canvas id="cyberChart" style="max-height:140px;margin-top:8px"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 10: ACTIVITY LOG -->
+<section id="log" class="reveal">
+  <div class="section-header">
+    <span class="section-id">10</span>
+    <span class="section-title">Activity Log &amp; Timeline</span>
+    <span class="section-badge">AUTO-TRACKED</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="log-wrap">
+    <div class="log-filters">
+      <button class="log-filter active" onclick="filterLog(this,'all')">ALL</button>
+      <button class="log-filter" onclick="filterLog(this,'deploy')">DEPLOYMENTS</button>
+      <button class="log-filter" onclick="filterLog(this,'alert')">ALERTS</button>
+      <button class="log-filter" onclick="filterLog(this,'patrol')">PATROLS</button>
+      <button class="log-filter" onclick="filterLog(this,'system')">SYSTEM</button>
+    </div>
+    <div id="log-entries"></div>
+  </div>
+</section>
+
+</main>
+
+<!-- BOTTOM TICKER -->
+<div class="bottom-ticker">
+  <div class="ticker-label">▸ LIVE FEED</div>
+  <div class="ticker-track">
+    <div class="ticker-content">
+      <span>🔴 SECTOR-7 INTRUSION · RESPONSE DEPLOYED · ETA 8 MIN</span>
+      <span>🟡 DRONE SIGHTING LADAKH · SECTOR 12 · UNDER OBSERVATION</span>
+      <span>🟢 PATROL ALPHA-7 ALL CLEAR · SECTORS 3-9</span>
+      <span>🔴 CYBER ATTACK BLOCKED · FIREWALL 99% INTEGRITY</span>
+      <span>🟡 LOW VISIBILITY ADVISORY · KASHMIR VALLEY · 14:00–18:00 UTC</span>
+      <span>🟢 REINFORCEMENTS DEPLOYED · SECTOR 7 · 23 UNITS ACTIVE</span>
+      <span>📡 SATELLITE UPLINK STABLE · 14 BIRDS LOCKED</span>
+      <span>⚙ ARMOURED UNIT A-3 · SECTOR 4 PATROL · ON SCHEDULE</span>
+      <span>🔴 SECTOR-7 INTRUSION · RESPONSE DEPLOYED · ETA 8 MIN</span>
+      <span>🟡 DRONE SIGHTING LADAKH · SECTOR 12 · UNDER OBSERVATION</span>
+      <span>🟢 PATROL ALPHA-7 ALL CLEAR · SECTORS 3-9</span>
+      <span>🔴 CYBER ATTACK BLOCKED · FIREWALL 99% INTEGRITY</span>
+      <span>🟡 LOW VISIBILITY ADVISORY · KASHMIR VALLEY · 14:00–18:00 UTC</span>
+      <span>🟢 REINFORCEMENTS DEPLOYED · SECTOR 7 · 23 UNITS ACTIVE</span>
+      <span>📡 SATELLITE UPLINK STABLE · 14 BIRDS LOCKED</span>
+      <span>⚙ ARMOURED UNIT A-3 · SECTOR 4 PATROL · ON SCHEDULE</span>
+    </div>
+  </div>
+</div>
+
+<!-- EMERGENCY BUTTON -->
+<button class="emergency-btn" onclick="triggerEmergency()">🚨 EMERGENCY<br>PROTOCOL</button>
+
+<script>
+// =====================================================
+// CLOCK
+// =====================================================
+function updateClock(){
+  const now=new Date();
+  document.getElementById('top-clock').textContent=now.toUTCString().slice(17,25)+' UTC';
+  const h=now.getHours();
+  const tod=document.getElementById('env-tod');
+  if(tod) tod.textContent=h>=6&&h<20?'DAY':'NIGHT';
+}
+setInterval(updateClock,1000); updateClock();
+
+let lastUpdateSec=0;
+setInterval(()=>{lastUpdateSec++;const el=document.getElementById('last-update');if(el)el.textContent=lastUpdateSec+'s ago';},1000);
+setInterval(()=>{lastUpdateSec=0;},30000);
+
+// =====================================================
+// LOGOUT
+// =====================================================
+function confirmLogout(){
+  return confirm('⚠ LOGOUT CONFIRMATION\nAre you sure you want to log out of SENTINEL Command Dashboard?');
+}
+
+// =====================================================
+// TOAST
+// =====================================================
+function showToast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast '+(type||'');
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3500);
+}
+
+// =====================================================
+// SCROLL REVEAL
+// =====================================================
+const observer=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');});
+},{threshold:0.05});
+document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
+
+// =====================================================
+// MAP — REAL WORLD LEAFLET with dynamic army pins
+// =====================================================
+const INDIA_SECTORS={
+  Ladakh:      {lat:34.2,lng:77.6,threat:'HIGH',zoom:7,color:'#ff2244'},
+  Kashmir:     {lat:34.0,lng:74.8,threat:'HIGH',zoom:8,color:'#ff2244'},
+  Uttarakhand: {lat:30.3,lng:79.5,threat:'MED', zoom:8,color:'#ffaa00'},
+  Punjab:      {lat:31.1,lng:75.3,threat:'MED', zoom:8,color:'#ffaa00'},
+  Rajasthan:   {lat:27.0,lng:70.0,threat:'LOW', zoom:7,color:'#00ff88'},
+  Arunachal:   {lat:28.2,lng:94.7,threat:'LOW', zoom:7,color:'#00ff88'},
+  Sikkim:      {lat:27.5,lng:88.5,threat:'LOW', zoom:9,color:'#00ff88'},
+  Gujarat:     {lat:23.0,lng:68.5,threat:'MED', zoom:7,color:'#ffaa00'},
+  Manipur:     {lat:24.6,lng:93.9,threat:'LOW', zoom:8,color:'#00ff88'},
+};
+
+const THREAT_ZONES=[
+  {name:'Ladakh Border',coords:[[35.5,78],[35.5,80],[33.5,80],[33.5,78]],color:'#ff2244',threat:'HIGH'},
+  {name:'LoC Kashmir',  coords:[[34.8,73.5],[34.8,75],[33.0,75],[33.0,73.5]],color:'#ff2244',threat:'HIGH'},
+  {name:'Punjab IB',    coords:[[32.2,74],[32.2,75.5],[30.5,75.5],[30.5,74]],color:'#ffaa00',threat:'MED'},
+  {name:'Rajasthan IB', coords:[[28.5,70],[28.5,72],[24.5,72],[24.5,70]],color:'#00ff88',threat:'LOW'},
+  {name:'Arunachal LAC',coords:[[29.5,91.5],[29.5,97],[26.5,97],[26.5,91.5]],color:'#00ff88',threat:'LOW'},
+  {name:'Gujarat IB',   coords:[[24.5,68],[24.5,70],[22.0,70],[22.0,68]],color:'#ffaa00',threat:'MED'},
+];
+
+// Army units — dynamically change position slightly over time
+let ARMY_UNITS=[
+  {id:'ALPHA-7',  lat:34.52, lng:78.45, type:'Infantry',  region:'Ladakh',      status:'ON STATION', strength:42, commander:'Maj. Rajput'},
+  {id:'BRAVO-3',  lat:34.12, lng:74.25, type:'Infantry',  region:'Kashmir',     status:'PATROL',     strength:38, commander:'Cpt. Singh'},
+  {id:'CHARLIE-1',lat:31.48, lng:74.82, type:'Armoured',  region:'Punjab',      status:'ON STATION', strength:15, commander:'Col. Sharma'},
+  {id:'DELTA-4',  lat:27.48, lng:70.55, type:'Drone Sq.', region:'Rajasthan',   status:'AIRBORNE',   strength:8,  commander:'Lt. Mehta'},
+  {id:'ECHO-2',   lat:28.05, lng:94.18, type:'Infantry',  region:'Arunachal',   status:'ON STATION', strength:55, commander:'Maj. Borah'},
+  {id:'FOXT-9',   lat:27.32, lng:88.38, type:'Sniper',    region:'Sikkim',      status:'PATROL',     strength:12, commander:'Sgt. Tamang'},
+  {id:'GOLF-5',   lat:23.52, lng:68.82, type:'Armoured',  region:'Gujarat',     status:'ON STATION', strength:20, commander:'Cpt. Patel'},
+  {id:'HOTEL-6',  lat:24.78, lng:93.72, type:'Infantry',  region:'Manipur',     status:'PATROL',     strength:30, commander:'Lt. Keishing'},
+  {id:'INDIA-3',  lat:30.22, lng:79.82, type:'Artillery', region:'Uttarakhand', status:'ON STATION', strength:18, commander:'Maj. Bisht'},
+  {id:'JULIET-1', lat:33.78, lng:76.52, type:'Drone Sq.', region:'Ladakh',      status:'AIRBORNE',   strength:6,  commander:'Lt. Verma'},
+  {id:'KILO-8',   lat:34.28, lng:73.82, type:'Sniper',    region:'Kashmir',     status:'ACTIVE',     strength:10, commander:'Sgt. Zargar'},
+  {id:'LIMA-2',   lat:31.82, lng:75.22, type:'Infantry',  region:'Punjab',      status:'ON STATION', strength:48, commander:'Maj. Dhaliwal'},
+];
+
+const TYPE_COLOR={
+  'Infantry':  '#00ff88',
+  'Armoured':  '#ffaa00',
+  'Drone Sq.': '#00d4ff',
+  'Sniper':    '#9b59ff',
+  'Artillery': '#ff6600',
+};
+const TYPE_SYMBOL={
+  'Infantry':  '▲',
+  'Armoured':  '■',
+  'Drone Sq.': '◆',
+  'Sniper':    '●',
+  'Artillery': '✦',
+};
+
+let leafletMap=null;
+let currentTileLayer=null;
+let armyMarkers=[];   // {unit, marker, lm}
+
+const TILE_LAYERS={
+  streets:   {url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',attr:'© OpenStreetMap contributors',opacity:0.55},
+  satellite: {url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',attr:'© Esri World Imagery',opacity:0.65},
+  terrain:   {url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',attr:'© OpenTopoMap',opacity:0.55},
+};
+
+function buildMarkerHtml(unit, pulse){
+  const col=TYPE_COLOR[unit.type]||'#00ff88';
+  const sym=TYPE_SYMBOL[unit.type]||'▲';
+  const glow=pulse ? `0 0 ${10+pulse*8}px ${col}` : `0 0 6px ${col}88`;
+  return `<div style="
+    width:26px;height:26px;
+    border:1.5px solid ${col};
+    background:rgba(4,15,19,0.92);
+    display:flex;align-items:center;justify-content:center;
+    font-size:11px;color:${col};
+    box-shadow:${glow};
+    font-family:'Share Tech Mono',monospace;
+    cursor:pointer;
+  ">${sym}</div>`;
+}
+
+function buildPopupHtml(unit){
+  const col=TYPE_COLOR[unit.type]||'#00ff88';
+  const statCol=unit.status==='ON STATION'?'#00ff88':unit.status==='PATROL'?'#ffaa00':'#00d4ff';
+  return `<div style="min-width:180px">
+    <div style="font-family:Orbitron,monospace;font-size:0.75rem;color:${col};margin-bottom:6px;letter-spacing:0.15em">⬡ UNIT ${unit.id}</div>
+    <div style="font-size:0.6rem;color:#a8c8b8;line-height:2">
+      <span style="color:#3a5a48">Type:</span> ${unit.type}<br>
+      <span style="color:#3a5a48">Region:</span> ${unit.region}<br>
+      <span style="color:#3a5a48">Status:</span> <span style="color:${statCol}">${unit.status}</span><br>
+      <span style="color:#3a5a48">Strength:</span> ${unit.strength} personnel<br>
+      <span style="color:#3a5a48">CO:</span> ${unit.commander}<br>
+      <span style="color:#3a5a48">Coords:</span> ${unit.lat.toFixed(3)}°N ${unit.lng.toFixed(3)}°E
+    </div>
+  </div>`;
+}
+
+function initLeafletMap(){
+  const mapEl=document.getElementById('leaflet-india-map');
+  const wrap=document.getElementById('mapWrap');
+  mapEl.style.height=(wrap.clientHeight||520)+'px';
+
+  leafletMap=L.map('leaflet-india-map',{
+    center:[22,80],zoom:5,
+    zoomControl:true,attributionControl:true,preferCanvas:true
+  });
+
+  const tl=TILE_LAYERS.streets;
+  currentTileLayer=L.tileLayer(tl.url,{attribution:tl.attr,maxZoom:18,opacity:tl.opacity}).addTo(leafletMap);
+
+  // Threat zone polygons
+  THREAT_ZONES.forEach(zone=>{
+    const alpha=zone.threat==='HIGH'?0.22:zone.threat==='MED'?0.14:0.08;
+    L.polygon(zone.coords,{
+      color:zone.color,fillColor:zone.color,fillOpacity:alpha,
+      weight:1.5,dashArray:zone.threat==='HIGH'?'5,4':null,opacity:0.7
+    }).addTo(leafletMap)
+    .bindPopup(`<span style="color:${zone.color};font-family:Orbitron,monospace;font-size:0.7rem">⬡ ${zone.name}</span><br>Threat: <strong style="color:${zone.color}">${zone.threat}</strong>`);
+  });
+
+  // Army unit markers
+  ARMY_UNITS.forEach(unit=>{
+    const icon=L.divIcon({html:buildMarkerHtml(unit,0),className:'',iconSize:[26,26],iconAnchor:[13,13]});
+    const lm=L.marker([unit.lat,unit.lng],{icon}).addTo(leafletMap);
+    lm.bindPopup(buildPopupHtml(unit),{maxWidth:220});
+    // Hover tooltip
+    lm.on('mouseover',function(){this.openPopup();});
+    armyMarkers.push({unit,lm});
+  });
+
+  // India border outline
+  L.polygon([
+    [37.0,72.5],[36.5,77],[35.5,78],[34.5,78.5],[33.5,74],[34.2,73.5],
+    [33.0,73.0],[32.5,74.5],[31.5,75.5],[30.5,74.5],[29.5,70.5],[28.5,68.5],
+    [23.5,68],[22.5,68.5],[22.0,69.5],[21.0,72],[20.5,72.5],[20.0,73.0],
+    [17.0,73.5],[14.0,74.5],[10.0,76.5],[8.5,77.5],[8.0,78.0],[8.0,80.5],
+    [10.5,80.5],[13.5,80.5],[16.5,81.5],[19.5,85.5],[22.0,88.0],
+    [22.5,88.5],[23.5,89.5],[24.0,90.0],[25.5,90.0],[26.5,91.0],
+    [27.0,92.0],[27.5,92.5],[28.0,97.5],[29.5,97.5]
+  ],{color:'rgba(0,255,136,0.35)',fillColor:'transparent',weight:1,dashArray:'6,5',opacity:0.5}).addTo(leafletMap);
+
+  // Animate markers
+  animateArmyMarkers();
+  // Slowly drift unit positions
+  setInterval(driftUnitPositions,8000);
+}
+
+let mapPulseTick=0;
+function animateArmyMarkers(){
+  mapPulseTick++;
+  const pulse=0.5+0.5*Math.sin(mapPulseTick*0.1);
+  armyMarkers.forEach(({unit,lm})=>{
+    // Only update icon glow, don't move (move handled by driftUnitPositions)
+    const newIcon=L.divIcon({html:buildMarkerHtml(unit,pulse),className:'',iconSize:[26,26],iconAnchor:[13,13]});
+    lm.setIcon(newIcon);
+  });
+  setTimeout(animateArmyMarkers,120);
+}
+
+function driftUnitPositions(){
+  armyMarkers.forEach(({unit,lm})=>{
+    // Small random drift to simulate movement
+    unit.lat += (Math.random()-0.5)*0.04;
+    unit.lng += (Math.random()-0.5)*0.04;
+    lm.setLatLng([unit.lat,unit.lng]);
+    // Update popup content dynamically
+    lm.setPopupContent(buildPopupHtml(unit));
+  });
+}
+
+function setMapView(el,view){
+  document.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('active-view').textContent=view.toUpperCase();
+  if(leafletMap&&TILE_LAYERS[view]){
+    if(currentTileLayer) leafletMap.removeLayer(currentTileLayer);
+    const tl=TILE_LAYERS[view];
+    currentTileLayer=L.tileLayer(tl.url,{attribution:tl.attr,maxZoom:18,opacity:tl.opacity}).addTo(leafletMap);
+  }
+  showToast('🗺 Map view: '+view.toUpperCase(),'');
+}
+
+function selectSector(el,name){
+  document.querySelectorAll('.sector-item').forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('active-sector').textContent=name.toUpperCase();
+  const sel=document.getElementById('deploy-region');
+  for(let i=0;i<sel.options.length;i++){if(sel.options[i].value===name){sel.selectedIndex=i;break;}}
+  if(leafletMap&&INDIA_SECTORS[name]){
+    const s=INDIA_SECTORS[name];
+    leafletMap.flyTo([s.lat,s.lng],s.zoom,{duration:1.2});
+  }
+}
+
+// =====================================================
+// COMMAND OVERVIEW — DYNAMIC COUNTERS
+// =====================================================
+let _threats=7,_deployed=23,_drones=46,_personnel=4827;
+
+function flashStat(id){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.classList.remove('stat-flash');
+  void el.offsetWidth;
+  el.classList.add('stat-flash');
+  setTimeout(()=>el.classList.remove('stat-flash'),500);
+}
+
+function updateOverviewStats(){
+  const dth=(Math.random()<0.5?1:-1)*(Math.random()<0.7?1:0);
+  _threats=Math.max(2,Math.min(15,_threats+dth));
+  const high=Math.max(0,Math.floor(_threats*0.4));
+  const med=Math.max(0,Math.floor(_threats*0.4));
+  const low=Math.max(0,_threats-high-med);
+  document.getElementById('stat-threats').textContent=_threats;
+  document.getElementById('stat-threats-sub').textContent=`${high} HIGH · ${med} MEDIUM · ${low} LOW`;
+  flashStat('stat-threats');
+  document.getElementById('hud-threats').textContent=_threats+' DETECTED';
+
+  const ddep=(Math.random()<0.6?1:-1)*(Math.random()<0.5?1:0);
+  _deployed=Math.max(10,Math.min(50,_deployed+ddep));
+  const transit=Math.floor(_deployed*0.35);
+  const onpos=_deployed-transit;
+  document.getElementById('stat-deployed').textContent=_deployed;
+  document.getElementById('stat-deployed-sub').textContent=`${transit} in transit · ${onpos} on position`;
+  document.getElementById('stat-deployed-trend').textContent=ddep>0?'▲ INCREASING':ddep<0?'▼ REDUCING':'↔ STABLE';
+  document.getElementById('stat-deployed-trend').style.color=ddep>0?'var(--green)':ddep<0?'var(--red)':'var(--amber)';
+  flashStat('stat-deployed');
+  document.getElementById('hud-units').textContent=_deployed+' ACTIVE';
+
+  const ddr=(Math.random()<0.5?1:-1)*(Math.random()<0.4?1:0);
+  _drones=Math.max(30,Math.min(70,_drones+ddr));
+  const recon=Math.floor(_drones*0.65);
+  document.getElementById('stat-drones').textContent=_drones;
+  document.getElementById('stat-drones-sub').textContent=`${recon} recon · ${_drones-recon} strike-ready`;
+  flashStat('stat-drones');
+
+  const dper=Math.floor((Math.random()-0.5)*20);
+  _personnel=Math.max(4500,Math.min(5500,_personnel+dper));
+  document.getElementById('stat-personnel').textContent=_personnel.toLocaleString();
+  flashStat('stat-personnel');
+}
+setInterval(updateOverviewStats,5000);
+
+// =====================================================
+// SECTOR INTEL
+// =====================================================
+const THREAT_TYPES=['Unauthorized Movement','Drone Swarm','Border Intrusion','Cyber Probe','Armoured Vehicle','Infantry Formation','Air Violation','Signal Jamming','Tunnel Activity','Artillery Position'];
+const THREAT_REGIONS=['Ladakh','Kashmir Valley','Punjab Border','Rajasthan','Arunachal Pradesh','Sikkim','Uttarakhand','Gujarat Border','Manipur','West Bengal'];
+const THREAT_LEVELS=['HIGH','HIGH','MED','MED','LOW'];
+let intelEntries=[];
+
+function generateThreatEntry(){
+  const type=THREAT_TYPES[Math.floor(Math.random()*THREAT_TYPES.length)];
+  const region=THREAT_REGIONS[Math.floor(Math.random()*THREAT_REGIONS.length)];
+  const level=THREAT_LEVELS[Math.floor(Math.random()*THREAT_LEVELS.length)];
+  const confidence=60+Math.floor(Math.random()*38);
+  const now=new Date();
+  const time=now.toUTCString().slice(17,25);
+  const lat=(8+Math.random()*28).toFixed(1);
+  const lng=(68+Math.random()*28).toFixed(1);
+  return{type,region,level,confidence,time,lat,lng};
+}
+
+function renderSectorIntel(){
+  const el=document.getElementById('sector-intel');
+  if(!el) return;
+  el.innerHTML='';
+  intelEntries.slice(0,6).forEach(e=>{
+    const cls=e.level==='HIGH'?'new-threat':e.level==='MED'?'med-threat':'low-threat';
+    const col=e.level==='HIGH'?'var(--red)':e.level==='MED'?'var(--amber)':'var(--green)';
+    el.innerHTML+=`<div class="intel-entry ${cls}">
+      <div class="intel-time">${e.time} UTC</div>
+      <div class="intel-type" style="color:${col}">⬡ ${e.level} — <span class="intel-region">${e.region}</span></div>
+      <div style="color:var(--text);font-size:0.62rem">${e.type}</div>
+      <div style="font-size:0.55rem;color:var(--text-dim)">Loc: ${e.lat}°N ${e.lng}°E · Conf: ${e.confidence}%</div>
+    </div>`;
+  });
+}
+
+function addThreatEntry(){
+  const entry=generateThreatEntry();
+  intelEntries.unshift(entry);
+  if(intelEntries.length>10) intelEntries.pop();
+  renderSectorIntel();
+  const atext=document.getElementById('alert-text');
+  if(entry.level==='HIGH'&&atext){
+    atext.textContent=`ACTIVE THREAT — ${entry.type.toUpperCase()} DETECTED IN ${entry.region.toUpperCase()} · CONFIDENCE: ${entry.confidence}% · RESPONSE DEPLOYING`;
+    document.getElementById('alert-banner').style.display='flex';
+  }
+  addLog('alert','AUTO-SCAN',entry.region,`${entry.type} detected · Level: ${entry.level} · ${entry.confidence}% confidence`);
+  if(entry.level==='HIGH') addThreatCard(entry);
+}
+
+for(let i=0;i<5;i++) intelEntries.push(generateThreatEntry());
+renderSectorIntel();
+function scheduleNextThreat(){const d=8000+Math.random()*17000;setTimeout(()=>{addThreatEntry();scheduleNextThreat();},d);}
+scheduleNextThreat();
+
+// =====================================================
+// QUICK DEPLOY
+// =====================================================
+function quickDeploy(unit){
+  const region=document.getElementById('deploy-region').value||'Ladakh';
+  showToast('🚀 '+unit+' deployed to '+region,'');
+  addLog('deploy','CMD-QUICK',region,unit+' unit quick-deployed to '+region);
+  _deployed++;
+  document.getElementById('stat-deployed').textContent=_deployed;
+  flashStat('stat-deployed');
+  // Add a marker on map
+  const sec=INDIA_SECTORS[region]||{lat:22,lng:80};
+  const newUnit={id:'QD-'+Math.floor(Math.random()*99),lat:sec.lat+(Math.random()-0.5)*0.4,lng:sec.lng+(Math.random()-0.5)*0.4,type:unit==='Drone'?'Drone Sq.':unit==='Artillery'?'Artillery':unit==='Armour'?'Armoured':'Infantry',region,status:'DEPLOYING',strength:5,commander:'Quick Deploy'};
+  if(leafletMap){
+    const icon=L.divIcon({html:buildMarkerHtml(newUnit,0),className:'',iconSize:[26,26],iconAnchor:[13,13]});
+    const lm=L.marker([newUnit.lat,newUnit.lng],{icon}).addTo(leafletMap);
+    lm.bindPopup(buildPopupHtml(newUnit)).on('mouseover',function(){this.openPopup();});
+    ARMY_UNITS.push(newUnit);
+    armyMarkers.push({unit:newUnit,lm});
+  }
+}
+
+// =====================================================
+// THREATS
+// =====================================================
+let threatCards=[
+  {id:1,level:'high',type:'BORDER INTRUSION',region:'Ladakh — Sector 7',time:'12:14 UTC',desc:'3 armed individuals detected crossing LAC at grid 34.2°N. Movement pattern suggests coordinated advance.',confidence:94},
+  {id:2,level:'high',type:'DRONE SWARM',region:'Kashmir — Sector 3',time:'12:08 UTC',desc:'5 unidentified drones detected 2km north of LoC. Flying in formation at 800m altitude.',confidence:87},
+  {id:3,level:'med',type:'VEHICLE MOVEMENT',region:'Punjab Border — Sector 11',time:'11:55 UTC',desc:'2 unregistered vehicles detected near IB post P-23. Thermal signature consistent with military grade.',confidence:71},
+  {id:4,level:'med',type:'SIGNAL ANOMALY',region:'Arunachal — Sector 16',time:'11:42 UTC',desc:'Unusual radio frequency detected on military band. Possible jamming attempt. EW unit investigating.',confidence:65},
+  {id:5,level:'low',type:'WEATHER ALERT',region:'Uttarakhand — Sector 8',time:'11:20 UTC',desc:'Severe weather deteriorating visibility to <500m. Drone operations suspended.',confidence:99},
+];
+const THREAT_DESCS=[
+  'Unidentified convoy detected near border post. Satellite thermal confirms 4 vehicles.',
+  'Artillery position triangulated 3km from LAC. Shell casings suggest recent activity.',
+  'Underground tunnel vibration sensors triggered. Engineering unit dispatched.',
+  'High-altitude drone detected crossing restricted airspace. Interceptor en route.',
+  'Encrypted radio burst detected on known adversary frequency. Intelligence analyzing.',
+  'Thermal anomaly detected in dense forest near border fence. Canine unit deployed.',
+  'IED component cache discovered 2km inside disputed zone. EOD team notified.',
+  'Civilians in restricted zone — identity verification in progress.',
+];
+function getNextThreat(){
+  const tls=['high','high','med','med','low'];
+  const now=new Date();
+  return{
+    id:Date.now()+Math.random(),
+    level:tls[Math.floor(Math.random()*tls.length)],
+    type:THREAT_TYPES[Math.floor(Math.random()*THREAT_TYPES.length)].toUpperCase(),
+    region:THREAT_REGIONS[Math.floor(Math.random()*THREAT_REGIONS.length)]+' — Sector '+(Math.floor(Math.random()*20)+1),
+    time:now.toUTCString().slice(17,25)+' UTC',
+    desc:THREAT_DESCS[Math.floor(Math.random()*THREAT_DESCS.length)],
+    confidence:55+Math.floor(Math.random()*43)
+  };
+}
+function renderThreats(){
+  const el=document.getElementById('threats-grid');
+  if(!el) return;
+  if(threatCards.length===0){el.innerHTML='<div class="threats-empty">✓ ALL THREATS NEUTRALIZED — MONITORING CONTINUES</div>';return;}
+  el.innerHTML='';
+  threatCards.slice(0,8).forEach(t=>{
+    const col=t.level==='high'?'var(--red)':t.level==='med'?'var(--amber)':'var(--green)';
+    el.innerHTML+=`<div class="threat-card level-${t.level} threat-enter" id="threat-${t.id}">
+      <div class="threat-card-header">
+        <span class="threat-type ${t.level==='high'?'blink-red':''}">${t.type}</span>
+        <span class="threat-time">${t.time}</span>
+      </div>
+      <div style="font-size:0.58rem;color:${col};margin-bottom:6px">📍 ${t.region}</div>
+      <div class="threat-desc">${t.desc}</div>
+      <div class="confidence-bar"><div class="confidence-fill" style="width:${t.confidence}%;background:${col}"></div></div>
+      <div class="threat-meta" style="margin-top:6px">
+        <div class="threat-meta-item">Confidence: <strong style="color:${col}">${t.confidence}%</strong></div>
+        <div class="threat-meta-item">Level: <strong>${t.level.toUpperCase()}</strong></div>
+      </div>
+      <div class="threat-actions">
+        <button class="threat-btn btn-deploy" onclick="neutralizeThreat(${t.id},'${t.region}')">⚡ NEUTRALIZE</button>
+        <button class="threat-btn btn-monitor" onclick="showToast('📡 Monitoring threat ${t.id}','')">📡 MONITOR</button>
+        <button class="threat-btn btn-dismiss" onclick="dismissThreat(${t.id})">✕ DISMISS</button>
+      </div>
+    </div>`;
+  });
+}
+function addThreatCard(entry){
+  const id=Date.now();
+  threatCards.unshift({id,level:entry.level.toLowerCase(),type:entry.type.toUpperCase(),region:entry.region,time:entry.time+' UTC',desc:entry.type+' detected at '+entry.lat+'°N '+entry.lng+'°E. Automated response initiated.',confidence:entry.confidence});
+  if(threatCards.length>10) threatCards.pop();
+  renderThreats();
+  document.getElementById('stat-threats').textContent=threatCards.length;
+}
+function neutralizeThreat(id,region){
+  showToast('⚡ Response deployed — '+region,'danger');
+  addLog('deploy','CMD',region,'Rapid response deployed · Threat being neutralized');
+  const el=document.getElementById('threat-'+id);
+  if(el){
+    el.style.transition='all 0.4s ease';el.style.opacity='0';el.style.transform='scale(0.95)';
+    setTimeout(()=>{
+      threatCards=threatCards.filter(t=>t.id!=id);
+      renderThreats();
+      setTimeout(()=>{const next=getNextThreat();threatCards.push(next);renderThreats();showToast('📡 New threat: '+next.type+' — '+next.region.split(' — ')[0],next.level==='high'?'danger':'warn');},2500);
+    },400);
+  }
+}
+function dismissThreat(id){
+  const el=document.getElementById('threat-'+id);
+  if(el){
+    el.style.transition='all 0.3s ease';el.style.opacity='0';el.style.transform='scale(0.95)';
+    setTimeout(()=>{
+      threatCards=threatCards.filter(t=>t.id!=id);
+      renderThreats();
+      setTimeout(()=>{const next=getNextThreat();threatCards.push(next);renderThreats();},2000);
+    },300);
+  }
+}
+renderThreats();
+
+// =====================================================
+// DEPLOYMENT — only arrived units blink
+// =====================================================
+let deployments=[
+  {name:'INFANTRY-BRAVO-7',sector:'Ladakh',status:'moving',pct:64,detail:'5 units · Fast-move formation'},
+  {name:'DRONE-SQUAD-D3',sector:'Kashmir',status:'arrived',pct:100,detail:'3 drones · Surveillance mode'},
+  {name:'ARMOUR-A2',sector:'Punjab',status:'arrived',pct:100,detail:'2 tanks · Post-BRAVO — ON STATION'},
+  {name:'SNIPER-ECHO-4',sector:'Sector 12',status:'moving',pct:38,detail:'2 units · High-ground seek'},
+];
+
+let activeDeployingName=null; // track the single unit currently in transit
+
+function renderDeployments(){
+  const el=document.getElementById('dep-list');
+  if(!el) return;
+  el.innerHTML='';
+  deployments.forEach(d=>{
+    // ONLY the single unit with activeDeployingName gets the blink class
+    const blinkCls=(d.name===activeDeployingName && d.status==='moving')?'is-deploying':'';
+    const barColor=d.status==='arrived'?'var(--green)':'var(--amber)';
+    el.innerHTML+=`<div class="dep-item ${blinkCls}">
+      <div class="dep-header">
+        <span class="dep-name">${d.name}</span>
+        <span class="dep-status ${d.status}">${d.status.toUpperCase()}</span>
+      </div>
+      <div class="dep-detail">${d.sector} · ${d.detail}</div>
+      <div class="dep-progress-wrap">
+        <div class="dep-bar"><div class="dep-bar-fill" style="width:${d.pct}%;background:${barColor}"></div></div>
+        <span class="dep-pct">${d.pct}%</span>
+      </div>
+    </div>`;
+  });
+  document.getElementById('dep-count-display').textContent=deployments.length;
+}
+renderDeployments();
+
+function selectUnit(el){
+  document.querySelectorAll('.unit-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function deployUnits(){
+  const sector=document.getElementById('dep-sector').value.split(' — ')[0];
+  const unit=document.querySelector('.unit-card.selected .unit-name')?.textContent||'Infantry';
+  const count=document.getElementById('dep-count').value;
+  const name=`${unit.toUpperCase().split(' ')[0]}-${String.fromCharCode(65+Math.floor(Math.random()*26))}${Math.floor(Math.random()*9)+1}`;
+  const newDep={name,sector,status:'moving',pct:0,detail:`${count} units · Deploying`};
+  deployments.unshift(newDep);
+  activeDeployingName=name; // mark THIS unit as the one blinking
+  renderDeployments();
+  showToast('🚀 '+name+' deploying to '+sector,'');
+  addLog('deploy','CMD',sector,unit+' x'+count+' authorized and deploying');
+  _deployed+=parseInt(count)||1;
+  document.getElementById('stat-deployed').textContent=_deployed;
+  flashStat('stat-deployed');
+  let prog=0;
+  const iv=setInterval(()=>{
+    prog=Math.min(prog+Math.random()*5+2,100);
+    newDep.pct=Math.round(prog);
+    if(prog>=100){
+      newDep.status='arrived';
+      activeDeployingName=null; // stop blinking once arrived
+      clearInterval(iv);
+    }
+    renderDeployments();
+  },500);
+}
+
+// =====================================================
+// MISSION ANALYTICS
+// =====================================================
+const MISSION_STATS=[
+  {key:'success',   label:'Mission Success',       val:87,type:'success',fillClass:'mission-fill-success'},
+  {key:'intercept', label:'Intercept Probability', val:72,type:'success',fillClass:'mission-fill-success'},
+  {key:'neutral',   label:'Threat Neutralized',    val:63,type:'risk',   fillClass:'mission-fill-risk'},
+  {key:'collat',    label:'Collateral Risk',        val:12,type:'risk',   fillClass:'mission-fill-risk'},
+  {key:'route',     label:'Route Clear',            val:91,type:'success',fillClass:'mission-fill-success'},
+  {key:'comms',     label:'Comms Uptime',           val:98,type:'success',fillClass:'mission-fill-success'},
+  {key:'ready',     label:'Force Readiness',        val:79,type:'success',fillClass:'mission-fill-success'},
+];
+let missionValues=MISSION_STATS.map(s=>({...s}));
+
+function renderMissionAnalytics(){
+  const el=document.getElementById('mission-analytics-rows');
+  if(!el) return;
+  el.innerHTML='';
+  missionValues.forEach(s=>{
+    const col=s.type==='risk'?(s.val>30?'var(--red)':'var(--amber)'):(s.val>=80?'var(--green)':s.val>=60?'var(--cyan)':'var(--amber)');
+    el.innerHTML+=`<div class="mission-stat-row">
+      <span class="mission-stat-label">${s.label}</span>
+      <div class="mission-stat-bar-wrap"><div class="mission-stat-bar"><div class="mission-stat-fill ${s.fillClass}" id="ms-bar-${s.key}" style="width:${s.val}%"></div></div></div>
+      <span class="mission-stat-val" id="ms-val-${s.key}" style="color:${col}">${s.val}%</span>
+      <span class="mission-stat-chg" id="ms-chg-${s.key}" style="color:var(--text-dim)">—</span>
+    </div>`;
+  });
+}
+function updateMissionAnalytics(){
+  missionValues.forEach(s=>{
+    const delta=(Math.random()-0.48)*4;
+    const prev=s.val;
+    s.val=s.type==='risk'?Math.max(2,Math.min(55,s.val+delta)):Math.max(40,Math.min(100,s.val+delta));
+    s.val=Math.round(s.val);
+    const diff=s.val-prev;
+    const col=s.type==='risk'?(s.val>30?'var(--red)':'var(--amber)'):(s.val>=80?'var(--green)':s.val>=60?'var(--cyan)':'var(--amber)');
+    const barEl=document.getElementById('ms-bar-'+s.key);
+    const valEl=document.getElementById('ms-val-'+s.key);
+    const chgEl=document.getElementById('ms-chg-'+s.key);
+    if(barEl) barEl.style.width=s.val+'%';
+    if(valEl){valEl.textContent=s.val+'%';valEl.style.color=col;}
+    if(chgEl){
+      if(diff>0.5){chgEl.textContent='▲ +'+Math.abs(Math.round(diff));chgEl.className='mission-stat-chg chg-up';}
+      else if(diff<-0.5){chgEl.textContent='▼ -'+Math.abs(Math.round(diff));chgEl.className='mission-stat-chg chg-dn';}
+      else{chgEl.textContent='—';chgEl.className='mission-stat-chg chg-flat';}
+    }
+  });
+}
+renderMissionAnalytics();
+setInterval(updateMissionAnalytics,3000);
+
+// =====================================================
+// AI COMMAND — remove on action, replace with next
+// =====================================================
+const AI_REC_POOL=[
+  {text:'Anomalous movement pattern at grid 34.2°N 76.8°E (Ladakh). Recommend deploying 2 drone units + 5 infantry for intercept. Estimated threat neutralization: 14 minutes.',conf:92,confColor:'var(--green)'},
+  {text:'Kashmir Valley — weather window closing. Drone operations must complete before 16:00 UTC. Recommend recall of Drone Squad D-3 within 45 minutes.',conf:78,confColor:'var(--amber)'},
+  {text:'Cyber activity spike on Sector 9 communications node. Recommend isolating and rerouting via backup channel BRAVO-2. ETA restoration: 6 minutes.',conf:85,confColor:'var(--green)'},
+  {text:'Punjab border — unregistered thermal signatures moving south at 3 km/h. Recommend dispatch of Sniper Unit ECHO and aerial drone surveillance.',conf:71,confColor:'var(--amber)'},
+  {text:'Rajasthan IB quiet sector shows encrypted radio bursts. Recommend electronic warfare unit forward deployment to triangulate origin.',conf:88,confColor:'var(--green)'},
+  {text:'Arunachal LAC — satellite pass in 22 minutes. Recommend repositioning patrol units for optimal visual coverage during window.',conf:95,confColor:'var(--green)'},
+  {text:'Gujarat coast — maritime radar contact 18km offshore. Cross-reference with naval intelligence. Recommend coastal patrol activation.',conf:67,confColor:'var(--amber)'},
+  {text:'Supply chain analysis shows ammo depot at Sector 4 below threshold. Recommend restocking convoy dispatch within 2 hours.',conf:90,confColor:'var(--green)'},
+];
+
+let aiPoolIndex=0;
+let aiRecs=[];
+
+function getNextAIRec(){
+  const r=AI_REC_POOL[aiPoolIndex%AI_REC_POOL.length];
+  aiPoolIndex++;
+  return{...r,id:Date.now()+Math.random()};
+}
+
+function renderAIRecs(){
+  const container=document.getElementById('ai-rec-container');
+  if(!container) return;
+  container.innerHTML='';
+  aiRecs.forEach(rec=>{
+    const div=document.createElement('div');
+    div.className='ai-rec ai-enter';
+    div.id='ai-rec-'+rec.id;
+    div.innerHTML=`
+      <div class="ai-rec-text">${rec.text}</div>
+      <div class="ai-confidence">
+        <span>Confidence:</span>
+        <div class="ai-conf-bar"><div class="ai-conf-fill" style="width:${rec.conf}%"></div></div>
+        <span style="color:${rec.confColor}">${rec.conf}%</span>
+      </div>
+      <div class="ai-rec-actions" style="margin-top:8px">
+        <button class="ai-btn ai-btn-accept" onclick="handleAI('${rec.id}','execute')">✓ EXECUTE</button>
+        <button class="ai-btn ai-btn-decline" onclick="handleAI('${rec.id}','dismiss')">✕ DISMISS</button>
+      </div>`;
+    container.appendChild(div);
+  });
+}
+
+function handleAI(id,action){
+  const el=document.getElementById('ai-rec-'+id);
+  if(el){
+    el.style.transition='all 0.4s ease';
+    el.style.opacity='0';
+    el.style.transform='translateX(20px)';
+    el.style.maxHeight=el.offsetHeight+'px';
+    setTimeout(()=>{
+      el.style.maxHeight='0';el.style.padding='0';el.style.margin='0';el.style.overflow='hidden';
+      setTimeout(()=>{
+        // Remove from pool and add next
+        aiRecs=aiRecs.filter(r=>r.id!=id);
+        if(action==='execute'){
+          showToast('✅ AI Recommendation executed','');
+          addLog('deploy','AI-CMD','AUTO','AI recommendation executed · Response dispatched');
+        } else {
+          showToast('AI recommendation dismissed','');
+        }
+        // Bring in next recommendation after short delay
+        setTimeout(()=>{
+          aiRecs.push(getNextAIRec());
+          renderAIRecs();
+        },1000);
+      },300);
+    },400);
+  }
+}
+
+// Init with 2 recommendations
+aiRecs.push(getNextAIRec());
+aiRecs.push(getNextAIRec());
+renderAIRecs();
+
+// Auto-rotate: add new recommendation every 30s if fewer than 2
+setInterval(()=>{
+  if(aiRecs.length<2){aiRecs.push(getNextAIRec());renderAIRecs();}
+},30000);
+
+// =====================================================
+// BROADCAST LOG
+// =====================================================
+let bcastLog=[];
+function broadcastCmd(type,title,detail){
+  const now=new Date().toUTCString().slice(17,25)+' UTC';
+  bcastLog.unshift({type,title,detail,time:now});
+  if(bcastLog.length>20) bcastLog.pop();
+  renderBcastLog();
+  const toastType=type==='emergency'?'danger':type==='all'?'warn':'';
+  showToast(title,toastType);
+  if(type==='emergency') triggerEmergency();
+  addLog('system','CMD-BCAST','GLOBAL',title+' — '+detail);
+}
+function renderBcastLog(){
+  const el=document.getElementById('bcast-output-log');
+  if(!el) return;
+  if(bcastLog.length===0){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--text-dim);font-size:0.58rem;">Awaiting broadcast commands...</div>';return;}
+  el.innerHTML=bcastLog.map(e=>{
+    const typeLabel=e.type==='all'?'BROADCAST':e.type==='emergency'?'EMERGENCY':e.type==='standby'?'STANDBY':e.type==='silent'?'SILENT':'CHANNEL';
+    return `<div class="bcast-log-entry">
+      <span class="bcast-log-time">${e.time}</span>
+      <span class="bcast-log-type bcast-type-${e.type}">${typeLabel}</span>
+      <div class="bcast-log-msg">${e.title}<br><span style="color:var(--text-dim);font-size:0.55rem">${e.detail}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// =====================================================
+// ACTIVITY LOG
+// =====================================================
+let logData=[
+  {time:'12:14 UTC',type:'alert',sector:'Sector 7',desc:'Intrusion detected · RAPID RESPONSE DEPLOYED',by:'AUTO-AI'},
+  {time:'12:08 UTC',type:'alert',sector:'Ladakh',desc:'Drone sighting confirmed · Tracking initiated',by:'DRONE-AI'},
+  {time:'11:55 UTC',type:'deploy',sector:'Sector 11',desc:'Infantry BRAVO-7 dispatched · 5 units',by:'CMD-OPS'},
+  {time:'11:42 UTC',type:'patrol',sector:'Sector 3',desc:'Alpha-7 patrol complete · No contacts',by:'UNIT-A7'},
+  {time:'11:30 UTC',type:'system',sector:'NETWORK',desc:'Firewall updated · Rule set v4.7',by:'CYBER-AI'},
+  {time:'10:22 UTC',type:'system',sector:'NETWORK',desc:'Cyber probe blocked · AUTO-FIREWALL',by:'CYBER-AI'},
+  {time:'09:30 UTC',type:'patrol',sector:'Sector 9',desc:'Routine check Sector 9 · Logged',by:'UNIT-B9'},
+  {time:'09:15 UTC',type:'deploy',sector:'Sector 12',desc:'Drone Squad D-07 dispatched',by:'CMD-OPS'},
+];
+let activeFilter='all';
+function renderLog(){
+  const el=document.getElementById('log-entries');
+  if(!el) return;
+  el.innerHTML='';
+  const filtered=activeFilter==='all'?logData:logData.filter(l=>l.type===activeFilter);
+  filtered.forEach(l=>{
+    el.innerHTML+=`<div class="log-entry">
+      <span class="log-time">${l.time}</span>
+      <span class="log-type type-${l.type}">${l.type.toUpperCase()}</span>
+      <span class="log-sector">${l.sector}</span>
+      <span class="log-desc">${l.desc}</span>
+      <span class="log-by">${l.by}</span>
+    </div>`;
+  });
+}
+renderLog();
+function filterLog(btn,type){
+  activeFilter=type;
+  document.querySelectorAll('.log-filter').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderLog();
+}
+function addLog(type,by,sector,desc){
+  const now=new Date();
+  logData.unshift({time:now.toUTCString().slice(17,25)+' UTC',type,by,sector,desc});
+  if(logData.length>100) logData.pop();
+  renderLog();
+}
+
+// =====================================================
+// COMMS CHAT
+// =====================================================
+function sendChat(){
+  const input=document.getElementById('chat-input');
+  const msg=input.value.trim();
+  if(!msg) return;
+  const log=document.getElementById('chat-log');
+  log.innerHTML+=`<div class="chat-msg msg-cmd"><div class="msg-sender">CMD CENTER <span class="msg-time">· ${new Date().toUTCString().slice(17,25)} UTC</span></div>${msg}</div>`;
+  log.scrollTop=log.scrollHeight;
+  input.value='';
+  addLog('system','CMD','BROADCAST',msg);
+}
+
+// =====================================================
+// EMERGENCY
+// =====================================================
+let emergencyActive=false;
+function triggerEmergency(){
+  emergencyActive=!emergencyActive;
+  document.body.classList.toggle('emergency',emergencyActive);
+  document.querySelector('.emergency-btn').style.background=emergencyActive?'rgba(255,34,68,0.3)':'rgba(255,34,68,0.1)';
+  showToast(emergencyActive?'🚨 EMERGENCY PROTOCOL ACTIVATED':'✅ Emergency protocol deactivated',emergencyActive?'danger':'');
+  if(emergencyActive) addLog('alert','CMD','GLOBAL','EMERGENCY PROTOCOL ACTIVATED — All units on high alert');
+}
+
+// =====================================================
+// CHARTS
+// =====================================================
+const chartDefaults={
+  responsive:true,maintainAspectRatio:true,animation:{duration:400},
+  plugins:{legend:{labels:{color:'#3a5a48',font:{family:'Share Tech Mono',size:10}},position:'bottom'},tooltip:{backgroundColor:'#071419',borderColor:'#0d3025',borderWidth:1,titleColor:'#00ff88',bodyColor:'#a8c8b8'}},
+  scales:{x:{grid:{color:'rgba(0,255,136,0.05)'},ticks:{color:'#3a5a48',font:{family:'Share Tech Mono',size:9}}},y:{grid:{color:'rgba(0,255,136,0.05)'},ticks:{color:'#3a5a48',font:{family:'Share Tech Mono',size:9}}}}
+};
+
+const threatFreqData={labels:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],datasets:[{label:'Threats',data:[3,7,5,9,6,8,12],borderColor:'#ff2244',backgroundColor:'rgba(255,34,68,0.1)',tension:0.4,fill:true},{label:'Resolved',data:[3,6,5,8,5,7,10],borderColor:'#00ff88',backgroundColor:'rgba(0,255,136,0.08)',tension:0.4,fill:true}]};
+const threatChart=new Chart(document.getElementById('threatChart'),{type:'line',data:threatFreqData,options:{...chartDefaults}});
+setInterval(()=>{threatFreqData.datasets[0].data=threatFreqData.datasets[0].data.map(v=>Math.max(1,v+(Math.random()-0.4)*2));threatFreqData.datasets[1].data=threatFreqData.datasets[0].data.map(v=>Math.max(0,v-1-Math.random()*2));threatChart.update('none');},3000);
+
+const soldierData={labels:['Ladakh','Kashmir','Punjab','Rajasthan','Arunachal','Sikkim','Gujarat','Manipur'],datasets:[{label:'Personnel',data:[820,750,560,480,320,180,410,310],backgroundColor:'rgba(0,212,255,0.6)'}]};
+new Chart(document.getElementById('soldierChart'),{type:'bar',data:soldierData,options:{...chartDefaults}});
+
+const alertData={labels:['Intrusion','Cyber','Weather','Drone','Other'],datasets:[{data:[4,3,2,5,2],backgroundColor:['rgba(255,34,68,0.7)','rgba(0,212,255,0.7)','rgba(255,170,0,0.7)','rgba(0,255,136,0.7)','rgba(155,89,255,0.7)']}]};
+const alertChart=new Chart(document.getElementById('alertChart'),{type:'doughnut',data:alertData,options:{responsive:true,maintainAspectRatio:true,animation:{duration:500},plugins:{legend:{labels:{color:'#3a5a48',font:{family:'Share Tech Mono',size:9}},position:'bottom'}}}});
+setInterval(()=>{alertData.datasets[0].data=alertData.datasets[0].data.map(v=>Math.max(1,v+(Math.random()-0.4)*1));alertChart.update('none');},5000);
+
+const missionData={labels:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],datasets:[{label:'Success %',data:[94,91,96,93,97,95,89,97,98,96,97,97],borderColor:'#00ff88',backgroundColor:'rgba(0,255,136,0.08)',tension:0.4,fill:true}]};
+const missionChart=new Chart(document.getElementById('missionChart'),{type:'line',data:missionData,options:{...chartDefaults}});
+setInterval(()=>{missionData.datasets[0].data=missionData.datasets[0].data.map(v=>Math.min(100,Math.max(80,v+(Math.random()-0.5)*2)));missionChart.update('none');},6000);
+
+const responseData={labels:['Ladakh','Kashmir','Punjab','Raj','Aruna','Sikkim'],datasets:[{label:'Avg Response (min)',data:[8,11,6,4,14,10],backgroundColor:'rgba(0,212,255,0.6)'}]};
+const responseChart=new Chart(document.getElementById('responseChart'),{type:'bar',data:responseData,options:{...chartDefaults}});
+setInterval(()=>{responseData.datasets[0].data=responseData.datasets[0].data.map(v=>Math.max(2,v+(Math.random()-0.5)*1.5));responseChart.update('none');},3500);
+
+const threatLevelData={labels:Array.from({length:24},(_,i)=>i+'h'),datasets:[{label:'Threat Level',data:[2,2,1,1,2,3,4,5,6,7,6,5,6,8,9,7,6,7,8,9,8,7,6,7],borderColor:'#ffaa00',backgroundColor:'rgba(255,170,0,0.08)',tension:0.4,fill:true}]};
+const threatLevelChart=new Chart(document.getElementById('threatLevelChart'),{type:'line',data:threatLevelData,options:{...chartDefaults}});
+setInterval(()=>{threatLevelData.datasets[0].data.shift();threatLevelData.datasets[0].data.push(Math.max(1,Math.min(10,threatLevelData.datasets[0].data[22]+(Math.random()-0.45)*1.5)));threatLevelChart.update('none');},2500);
+
+const miniThreatData={labels:['HIGH','MED','LOW'],datasets:[{data:[3,3,1],backgroundColor:['rgba(255,34,68,0.8)','rgba(255,170,0,0.8)','rgba(0,255,136,0.7)']}]};
+const miniThreatChart=new Chart(document.getElementById('miniThreatChart'),{type:'doughnut',data:miniThreatData,options:{responsive:true,maintainAspectRatio:true,animation:{duration:500},plugins:{legend:{labels:{color:'#3a5a48',font:{family:'Share Tech Mono',size:9}},position:'right'}}}});
+setInterval(()=>{miniThreatData.datasets[0].data[0]=Math.max(1,threatCards.filter(t=>t.level==='high').length);miniThreatData.datasets[0].data[1]=Math.max(1,threatCards.filter(t=>t.level==='med').length);miniThreatData.datasets[0].data[2]=Math.max(1,threatCards.filter(t=>t.level==='low').length);miniThreatChart.update('none');},4000);
+
+const cyberData={labels:[],datasets:[{label:'Inbound',data:[],borderColor:'#00ff88',tension:0.4},{label:'Threats',data:[],borderColor:'#ff2244',tension:0.4}]};
+const cyberChart=new Chart(document.getElementById('cyberChart'),{type:'line',data:cyberData,options:{responsive:true,animation:false,plugins:{legend:{labels:{color:'#3a5a48',font:{family:'Share Tech Mono',size:9}}}},scales:{x:{grid:{color:'rgba(0,255,136,0.05)'},ticks:{color:'#3a5a48',font:{size:8},maxTicksLimit:8}},y:{grid:{color:'rgba(0,255,136,0.05)'},ticks:{color:'#3a5a48',font:{size:8}}}}}});
+setInterval(()=>{const label=new Date().toUTCString().slice(17,25);cyberData.labels.push(label);cyberData.datasets[0].data.push(20+Math.random()*40);cyberData.datasets[1].data.push(Math.random()*8);if(cyberData.labels.length>20){cyberData.labels.shift();cyberData.datasets[0].data.shift();cyberData.datasets[1].data.shift();}cyberChart.update('none');},2000);
+
+// =====================================================
+// NAV SCROLL HIGHLIGHT
+// =====================================================
+const sections=document.querySelectorAll('section[id]');
+const navLinks=document.querySelectorAll('.nav-link');
+window.addEventListener('scroll',()=>{
+  let current='';
+  sections.forEach(s=>{if(window.scrollY>=s.offsetTop-100) current=s.id;});
+  navLinks.forEach(l=>{l.classList.toggle('active',l.getAttribute('href')==='#'+current);});
+},{passive:true});
+
+// =====================================================
+// AUTO ALERTS
+// =====================================================
+const autoAlerts=[
+  {msg:'New drone contact — Sector 12 · Tracking initiated',type:'danger',delay:15000},
+  {msg:'Unit BRAVO-9 checked in — Sector 9 all clear',type:'',delay:30000},
+  {msg:'⚠ Weather alert updated — Visibility dropping fast',type:'warn',delay:45000},
+  {msg:'AI engine updated predictions — See AI Intel section',type:'',delay:60000},
+];
+autoAlerts.forEach(a=>setTimeout(()=>showToast(a.msg,a.type),a.delay));
+
+// =====================================================
+// INIT
+// =====================================================
+window.addEventListener('load',()=>{
+  initLeafletMap();
+});
+window.addEventListener('resize',()=>{
+  if(leafletMap) leafletMap.invalidateSize();
+});
+</script>
+<script>
+function confirmLogout() {
+  return confirm("Are you sure you want to logout?");
+}
+</script>
+</body>
+</html>

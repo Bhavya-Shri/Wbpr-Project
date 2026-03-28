@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SENTINEL — Secure Access</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #020b0e;
+    --surface: #040f13;
+    --green: #00ff88;
+    --green-dim: #00ff8840;
+    --green-glow: #00ff8820;
+    --red: #ff2244;
+    --amber: #ffaa00;
+    --cyan: #00d4ff;
+    --text: #a8c8b8;
+    --text-dim: #4a6655;
+    --grid: #0a1f18;
+    --border: #0d3025;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow: hidden;
+    cursor: crosshair;
+  }
+
+  /* === SCANLINE OVERLAY === */
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,255,136,0.02) 2px,
+      rgba(0,255,136,0.02) 4px
+    );
+    pointer-events:none; z-index:9999;
+    animation: scanroll 8s linear infinite;
+  }
+  @keyframes scanroll {
+    from { background-position: 0 0; }
+    to { background-position: 0 400px; }
+  }
+
+  /* === GRID BG === */
+  .grid-bg {
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: gridfade 4s ease-in-out infinite alternate;
+  }
+  @keyframes gridfade {
+    from { opacity:0.4; }
+    to { opacity:1; }
+  }
+
+  /* === CORNER DECORATIONS === */
+  .corner { position:fixed; width:80px; height:80px; }
+  .corner::before, .corner::after { content:''; position:absolute; background: var(--green); }
+  .corner::before { width:2px; height:40px; }
+  .corner::after { width:40px; height:2px; }
+  .corner.tl { top:20px; left:20px; }
+  .corner.tr { top:20px; right:20px; transform:scaleX(-1); }
+  .corner.bl { bottom:20px; left:20px; transform:scaleY(-1); }
+  .corner.br { bottom:20px; right:20px; transform:scale(-1); }
+
+  /* === BOOT SCREEN === */
+  #boot-screen {
+    position:fixed; inset:0; z-index:100;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    background: var(--bg);
+    transition: opacity 0.8s ease;
+  }
+
+  .boot-logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 4rem;
+    font-weight:900;
+    color: var(--green);
+    letter-spacing: 0.4em;
+    text-shadow: 0 0 40px var(--green), 0 0 80px var(--green-dim);
+    animation: logopulse 2s ease-in-out infinite;
+    margin-bottom: 8px;
+  }
+  @keyframes logopulse {
+    0%,100% { text-shadow: 0 0 20px var(--green), 0 0 60px var(--green-dim); }
+    50% { text-shadow: 0 0 60px var(--green), 0 0 120px var(--green), 0 0 200px var(--green-dim); }
+  }
+
+  .boot-subtitle {
+    font-family:'Rajdhani', sans-serif;
+    font-size:0.85rem;
+    letter-spacing:0.5em;
+    color: var(--text-dim);
+    text-transform:uppercase;
+    margin-bottom:60px;
+  }
+
+  .boot-log {
+    width:480px;
+    height:220px;
+    overflow:hidden;
+    border: 1px solid var(--border);
+    background: rgba(0,255,136,0.03);
+    padding:16px;
+    font-size:0.72rem;
+    line-height:1.8;
+    color: var(--text-dim);
+  }
+  .boot-log .ok { color: var(--green); }
+  .boot-log .warn { color: var(--amber); }
+  .boot-log .err { color: var(--red); }
+
+  .boot-bar-wrap {
+    width:480px; margin-top:20px;
+  }
+  .boot-bar-label {
+    display:flex; justify-content:space-between;
+    font-size:0.7rem; color:var(--text-dim);
+    margin-bottom:6px;
+  }
+  .boot-bar {
+    height:3px;
+    background: var(--border);
+    position:relative; overflow:hidden;
+  }
+  .boot-bar-fill {
+    height:100%;
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+    width:0%;
+    transition: width 0.1s linear;
+    box-shadow: 0 0 12px var(--green);
+  }
+
+  /* === LOGIN SCREEN === */
+  #login-screen {
+    position:fixed; inset:0; z-index:50;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none;
+    transition: opacity 0.8s ease 0.3s;
+  }
+  #login-screen.active { opacity:1; pointer-events:all; }
+
+  /* Radial sweep bg */
+  .radar-bg {
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .radar-ring {
+    position:absolute; border-radius:50%; border:1px solid;
+    animation: radar-pulse 3s ease-out infinite;
+  }
+  .radar-ring:nth-child(1) { width:300px; height:300px; border-color: rgba(0,255,136,0.15); animation-delay:0s; }
+  .radar-ring:nth-child(2) { width:500px; height:500px; border-color: rgba(0,255,136,0.1); animation-delay:0.5s; }
+  .radar-ring:nth-child(3) { width:700px; height:700px; border-color: rgba(0,255,136,0.06); animation-delay:1s; }
+  .radar-ring:nth-child(4) { width:900px; height:900px; border-color: rgba(0,255,136,0.03); animation-delay:1.5s; }
+  @keyframes radar-pulse {
+    0% { transform:scale(0.8); opacity:0; }
+    30% { opacity:1; }
+    100% { transform:scale(1.1); opacity:0; }
+  }
+
+  /* Sweep line */
+  .radar-sweep {
+    position:absolute; width:600px; height:600px;
+    border-radius:50%;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      transparent 300deg,
+      rgba(0,255,136,0.06) 330deg,
+      rgba(0,255,136,0.2) 360deg
+    );
+    animation: sweep 4s linear infinite;
+  }
+  @keyframes sweep { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+
+  /* === LOGIN PANEL === */
+  .login-panel {
+    width:440px;
+    background: rgba(4,15,19,0.92);
+    border: 1px solid var(--border);
+    position:relative;
+    backdrop-filter: blur(20px);
+    padding:40px;
+  }
+
+  /* Panel corners */
+  .login-panel::before, .login-panel::after {
+    content:''; position:absolute;
+    width:20px; height:20px;
+    border-color: var(--green);
+    border-style: solid;
+  }
+  .login-panel::before { top:-1px; left:-1px; border-width:2px 0 0 2px; }
+  .login-panel::after { bottom:-1px; right:-1px; border-width:0 2px 2px 0; }
+
+  .panel-header {
+    text-align:center; margin-bottom:32px;
+  }
+  .panel-logo {
+    font-family:'Orbitron', monospace;
+    font-size:2rem; font-weight:900;
+    color:var(--green);
+    letter-spacing:0.3em;
+    text-shadow: 0 0 20px var(--green);
+    display:block; margin-bottom:4px;
+  }
+  .panel-tagline {
+    font-family:'Rajdhani', sans-serif;
+    font-size:0.72rem;
+    letter-spacing:0.35em;
+    color:var(--text-dim);
+    text-transform:uppercase;
+  }
+
+  .divider {
+    height:1px;
+    background: linear-gradient(90deg, transparent, var(--border), var(--green-dim), var(--border), transparent);
+    margin:24px 0;
+  }
+
+  .role-select-label {
+    font-size:0.65rem; letter-spacing:0.2em;
+    color:var(--text-dim); text-transform:uppercase;
+    margin-bottom:10px; display:block;
+  }
+  .role-buttons {
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:8px; margin-bottom:24px;
+  }
+  .role-btn {
+    padding:10px 8px;
+    background:transparent;
+    border:1px solid var(--border);
+    color:var(--text-dim);
+    font-family:'Share Tech Mono', monospace;
+    font-size:0.65rem;
+    letter-spacing:0.1em;
+    cursor:pointer;
+    text-transform:uppercase;
+    transition:all 0.2s;
+    position:relative; overflow:hidden;
+  }
+  .role-btn::before {
+    content:'';position:absolute;
+    left:-100%;top:0;width:100%;height:100%;
+    background:linear-gradient(90deg,transparent,rgba(0,255,136,0.1),transparent);
+    transition:left 0.3s;
+  }
+  .role-btn:hover::before { left:100%; }
+  .role-btn:hover { border-color:var(--green); color:var(--green); }
+  .role-btn.selected {
+    border-color:var(--green);
+    background:rgba(0,255,136,0.08);
+    color:var(--green);
+    box-shadow:0 0 12px rgba(0,255,136,0.2);
+  }
+  .role-dot {
+    display:inline-block; width:6px; height:6px;
+    border-radius:50%; margin-right:6px;
+    vertical-align:middle;
+  }
+
+  .field-group { margin-bottom:18px; }
+  .field-label {
+    display:flex; justify-content:space-between;
+    font-size:0.63rem; letter-spacing:0.2em;
+    color:var(--text-dim); text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  .field-label span { color:var(--green); font-size:0.6rem; }
+
+  .field-input {
+    width:100%; padding:12px 14px;
+    background:rgba(0,255,136,0.03);
+    border:1px solid var(--border);
+    border-bottom-color:var(--text-dim);
+    color:var(--green);
+    font-family:'Share Tech Mono', monospace;
+    font-size:0.85rem;
+    outline:none;
+    transition:all 0.2s;
+    letter-spacing:0.05em;
+  }
+  .field-input:focus {
+    border-color:var(--green);
+    background:rgba(0,255,136,0.06);
+    box-shadow:0 0 0 1px var(--green-dim), inset 0 0 20px rgba(0,255,136,0.03);
+  }
+  .field-input::placeholder { color:var(--text-dim); }
+
+  .biometric-row {
+    display:flex; gap:10px; margin-bottom:24px;
+  }
+  .bio-btn {
+    flex:1; padding:10px;
+    background:rgba(0,212,255,0.05);
+    border:1px solid rgba(0,212,255,0.2);
+    color:rgba(0,212,255,0.6);
+    font-family:'Share Tech Mono',monospace;
+    font-size:0.6rem; letter-spacing:0.1em;
+    cursor:pointer; text-transform:uppercase;
+    transition:all 0.2s; text-align:center;
+  }
+  .bio-btn:hover {
+    border-color:var(--cyan);
+    color:var(--cyan);
+    box-shadow:0 0 10px rgba(0,212,255,0.2);
+  }
+  .bio-icon { font-size:1.2rem; display:block; margin-bottom:4px; }
+
+  .login-btn {
+    width:100%; padding:16px;
+    background:transparent;
+    border:1px solid var(--green);
+    color:var(--green);
+    font-family:'Orbitron', monospace;
+    font-size:0.8rem; font-weight:700;
+    letter-spacing:0.3em;
+    text-transform:uppercase;
+    cursor:pointer; position:relative; overflow:hidden;
+    transition:all 0.3s;
+  }
+  .login-btn::before {
+    content:'';position:absolute;inset:0;
+    background:linear-gradient(135deg,var(--green),var(--cyan));
+    opacity:0; transition:opacity 0.3s;
+  }
+  .login-btn:hover::before { opacity:0.1; }
+  .login-btn:hover {
+    box-shadow:0 0 30px rgba(0,255,136,0.4), inset 0 0 30px rgba(0,255,136,0.05);
+    letter-spacing:0.4em;
+  }
+  .login-btn span { position:relative; z-index:1; }
+
+  .btn-loading {
+    display:none; align-items:center; justify-content:center; gap:8px;
+    position:absolute; inset:0;
+    background: rgba(4,15,19,0.9);
+  }
+  .btn-loading.show { display:flex; }
+  .spinner {
+    width:14px; height:14px;
+    border:2px solid var(--green-dim);
+    border-top-color:var(--green);
+    border-radius:50%;
+    animation:spin 0.6s linear infinite;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  .panel-footer {
+    display:flex; justify-content:space-between;
+    margin-top:20px;
+    font-size:0.6rem; color:var(--text-dim);
+    letter-spacing:0.1em;
+  }
+
+  .threat-ticker {
+    position:fixed; bottom:0; left:0; right:0;
+    background:rgba(2,11,14,0.9); border-top:1px solid var(--border);
+    height:32px; overflow:hidden;
+    display:flex; align-items:center;
+  }
+  .ticker-label {
+    padding:0 16px;
+    font-size:0.6rem; color:var(--amber);
+    letter-spacing:0.15em; white-space:nowrap;
+    border-right:1px solid var(--border);
+    flex-shrink:0;
+  }
+  .ticker-track {
+    flex:1; overflow:hidden; position:relative;
+  }
+  .ticker-content {
+    display:flex; gap:60px;
+    animation:tick 30s linear infinite;
+    white-space:nowrap; font-size:0.6rem;
+    color:var(--text-dim); letter-spacing:0.08em;
+  }
+  @keyframes tick { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+
+  /* top status bar */
+  .status-bar {
+    position:fixed; top:0; left:0; right:0;
+    height:36px; background:rgba(2,11,14,0.95);
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center;
+    justify-content:space-between; padding:0 20px;
+    font-size:0.6rem; letter-spacing:0.15em;
+    z-index:200;
+  }
+  .status-left { display:flex; gap:24px; }
+  .status-item { color:var(--text-dim); }
+  .status-item .val { color:var(--green); margin-left:6px; }
+  .status-item .val.warn { color:var(--amber); }
+  .blink { animation:blinkanim 1s step-end infinite; }
+  @keyframes blinkanim { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  #clock { color:var(--green); font-size:0.75rem; font-family:'Orbitron',monospace; }
+
+  .alert-flash {
+    position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+    background:rgba(255,34,68,0.1); border:1px solid var(--red);
+    padding:8px 20px; color:var(--red);
+    font-size:0.7rem; letter-spacing:0.2em;
+    opacity:0; pointer-events:none;
+    transition: opacity 0.3s;
+  }
+  .alert-flash.show { opacity:1; }
+
+  /* Particles */
+  .particles { position:fixed; inset:0; pointer-events:none; }
+  .particle {
+    position:absolute; width:2px; height:2px;
+    background:var(--green); border-radius:50%;
+    animation:float linear infinite;
+    opacity:0.4;
+  }
+  @keyframes float {
+    0% { transform:translateY(100vh) translateX(0); opacity:0; }
+    10% { opacity:0.4; }
+    90% { opacity:0.2; }
+    100% { transform:translateY(-10px) translateX(var(--drift)); opacity:0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="particles" id="particles"></div>
+
+<!-- CORNER BRACKETS -->
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <div class="status-left">
+    <span class="status-item">SYS<span class="val">ONLINE</span></span>
+    <span class="status-item">NET<span class="val warn">ENCRYPTED</span></span>
+    <span class="status-item">THREAT<span class="val">ELEVATED</span></span>
+    <span class="status-item">AUTH<span class="val blink">REQUIRED ▮</span></span>
+  </div>
+  <div id="clock">00:00:00</div>
+</div>
+
+<!-- BOOT SCREEN -->
+<div id="boot-screen">
+  <div class="boot-logo">SENTINEL</div>
+  <div class="boot-subtitle">Integrated Border Defence Command System · v4.7.2</div>
+  <div class="boot-log" id="boot-log"></div>
+  <div class="boot-bar-wrap">
+    <div class="boot-bar-label">
+      <span>SYSTEM INITIALIZATION</span>
+      <span id="boot-pct">0%</span>
+    </div>
+    <div class="boot-bar"><div class="boot-bar-fill" id="boot-fill"></div></div>
+  </div>
+</div>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="radar-bg">
+    <div class="radar-ring"></div>
+    <div class="radar-ring"></div>
+    <div class="radar-ring"></div>
+    <div class="radar-ring"></div>
+    <div class="radar-sweep"></div>
+  </div>
+
+  <div class="login-panel">
+    <div class="panel-header">
+      <span class="panel-logo">SENTINEL</span>
+      <span class="panel-tagline">Ministry of Defence · Secure Command Access</span>
+    </div>
+    <div class="divider"></div>
+
+    <span class="role-select-label">▸ Select clearance level</span>
+    <div class="role-buttons">
+      <button class="role-btn" onclick="selectRole(this,'field')">
+        <span class="role-dot" style="background:#00ff88"></span>Field Officer
+      </button>
+      <button class="role-btn" onclick="selectRole(this,'command')">
+        <span class="role-dot" style="background:#ffaa00"></span>CMD Operator
+      </button>
+      <button class="role-btn" onclick="selectRole(this,'senior')">
+        <span class="role-dot" style="background:#ff2244"></span>Sr. Commander
+      </button>
+      <button class="role-btn" onclick="selectRole(this,'admin')">
+        <span class="role-dot" style="background:#888"></span>System Admin
+      </button>
+    </div>
+
+    <div class="field-group">
+      <div class="field-label">Personnel ID <span>ENCRYPTED</span></div>
+      <input class="field-input" id="uid" type="text" placeholder="▸ Enter service number" autocomplete="off"/>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Access Key <span>256-BIT AES</span></div>
+      <input class="field-input" id="pwd" type="password" placeholder="▸ Enter passphrase" autocomplete="off"/>
+    </div>
+
+    <div class="biometric-row">
+      <button class="bio-btn"><span class="bio-icon">👁</span>Iris Scan</button>
+      <button class="bio-btn"><span class="bio-icon">🖐</span>Biometric</button>
+      <button class="bio-btn"><span class="bio-icon">🔑</span>Token Key</button>
+    </div>
+
+    <button class="login-btn" onclick="doLogin()">
+      <span>⬡ Authenticate &amp; Enter</span>
+      <div class="btn-loading" id="btn-loader">
+        <div class="spinner"></div>
+        <span style="font-size:0.65rem;letter-spacing:0.2em">VERIFYING CREDENTIALS</span>
+      </div>
+    </button>
+
+    <div class="panel-footer">
+      <span>CLASSIFICATION: TOP SECRET</span>
+      <span>SESSION EXPIRES: 04:00:00</span>
+    </div>
+  </div>
+
+  <div class="alert-flash" id="alert-flash">⚠ INVALID CREDENTIALS — ACCESS DENIED</div>
+</div>
+
+<!-- TICKER -->
+<div class="threat-ticker">
+  <div class="ticker-label">▸ INTEL FEED</div>
+  <div class="ticker-track">
+    <div class="ticker-content">
+      <span>🔴 SECTOR-7 INTRUSION DETECTED · DEPLOYING RAPID RESPONSE</span>
+      <span>🟡 DRONE SIGHTING REPORTED NEAR LADAKH BORDER · SECTOR 12</span>
+      <span>🟢 PATROL UNIT ALPHA REPORTING IN · ALL CLEAR SECTOR 3-9</span>
+      <span>🔴 CYBER ATTACK ATTEMPT BLOCKED · FIREWALL INTEGRITY 97%</span>
+      <span>🟡 WEATHER ALERT: LOW VISIBILITY EXPECTED · KASHMIR VALLEY</span>
+      <span>🟢 REINFORCEMENTS DEPLOYED TO SECTOR 7 · ETA 12 MINUTES</span>
+      <span>🔴 SECTOR-7 INTRUSION DETECTED · DEPLOYING RAPID RESPONSE</span>
+      <span>🟡 DRONE SIGHTING REPORTED NEAR LADAKH BORDER · SECTOR 12</span>
+      <span>🟢 PATROL UNIT ALPHA REPORTING IN · ALL CLEAR SECTOR 3-9</span>
+      <span>🔴 CYBER ATTACK ATTEMPT BLOCKED · FIREWALL INTEGRITY 97%</span>
+      <span>🟡 WEATHER ALERT: LOW VISIBILITY EXPECTED · KASHMIR VALLEY</span>
+      <span>🟢 REINFORCEMENTS DEPLOYED TO SECTOR 7 · ETA 12 MINUTES</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// === CLOCK ===
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toUTCString().slice(17,25) + ' UTC';
+}
+setInterval(updateClock, 1000); updateClock();
+
+// === PARTICLES ===
+const pc = document.getElementById('particles');
+for (let i=0;i<30;i++){
+  const p=document.createElement('div'); p.className='particle';
+  p.style.cssText=`left:${Math.random()*100}%;
+    animation-duration:${8+Math.random()*12}s;
+    animation-delay:-${Math.random()*20}s;
+    --drift:${(Math.random()-0.5)*200}px;
+    width:${1+Math.random()*2}px;height:${1+Math.random()*2}px;`;
+  pc.appendChild(p);
+}
+
+// === BOOT SEQUENCE ===
+const bootLines = [
+  {t:0,   c:'',    txt:'SENTINEL COMMAND SYSTEM v4.7.2 — MOD CLASSIFIED'},
+  {t:200, c:'',    txt:'Copyright 2024 Indian Defence Research Wing'},
+  {t:400, c:'',    txt:'--- HARDWARE DIAGNOSTIC ---'},
+  {t:600, c:'ok',  txt:'[OK] CPU CORES: 64 · LOAD: 2.1%'},
+  {t:800, c:'ok',  txt:'[OK] MEMORY: 512GB ECC · USAGE: 18%'},
+  {t:1000,c:'ok',  txt:'[OK] QUANTUM ENCRYPTION MODULE: ACTIVE'},
+  {t:1200,c:'warn',txt:'[WARN] SECTOR-7 UPLINK DEGRADED — REROUTING'},
+  {t:1500,c:'ok',  txt:'[OK] REROUTE COMPLETE — ALL SECTORS ONLINE'},
+  {t:1800,c:'ok',  txt:'[OK] NEURAL THREAT DETECTION ENGINE: LOADED'},
+  {t:2100,c:'ok',  txt:'[OK] MAP DATABASE: 847 ZONES INDEXED'},
+  {t:2400,c:'ok',  txt:'[OK] BIOMETRIC AUTH MODULE: ACTIVE'},
+  {t:2700,c:'ok',  txt:'[OK] SATELLITE UPLINK: 14 SATELLITES LOCKED'},
+  {t:3000,c:'warn',txt:'[WARN] THREAT LEVEL ELEVATED — SECTOR 7, 12'},
+  {t:3300,c:'ok',  txt:'[OK] FIREWALL: 99.8% INTEGRITY'},
+  {t:3600,c:'ok',  txt:'[OK] ALL SYSTEMS NOMINAL'},
+  {t:3900,c:'ok',  txt:'[OK] LOADING SECURE INTERFACE...'},
+  {t:4200,c:'ok',  txt:'>>> AUTHENTICATION REQUIRED <<<'},
+];
+
+const bootLog = document.getElementById('boot-log');
+const bootFill = document.getElementById('boot-fill');
+const bootPct  = document.getElementById('boot-pct');
+
+bootLines.forEach(line=>{
+  setTimeout(()=>{
+    const div=document.createElement('div');
+    div.className=line.c;
+    div.textContent=line.txt;
+    bootLog.appendChild(div);
+    bootLog.scrollTop=bootLog.scrollHeight;
+  },line.t);
+});
+
+// Progress bar
+let pct=0;
+const barInterval=setInterval(()=>{
+  pct+=1;
+  bootFill.style.width=pct+'%';
+  bootPct.textContent=pct+'%';
+  if(pct>=100) clearInterval(barInterval);
+},46);
+
+// Transition to login
+setTimeout(()=>{
+  const boot=document.getElementById('boot-screen');
+  boot.style.opacity='0';
+  setTimeout(()=>{
+    boot.style.display='none';
+    document.getElementById('login-screen').classList.add('active');
+  },800);
+},5000);
+
+// === ROLE SELECT ===
+let selectedRole = null;
+function selectRole(btn, role){
+  document.querySelectorAll('.role-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedRole = role;
+}
+
+// === LOGIN ===
+function doLogin(){
+  const uid=document.getElementById('uid').value;
+  const pwd=document.getElementById('pwd').value;
+  if(!uid||!pwd||!selectedRole){
+    const fl=document.getElementById('alert-flash');
+    fl.textContent = !selectedRole
+      ? '⚠ SELECT A CLEARANCE LEVEL FIRST'
+      : '⚠ CREDENTIALS INCOMPLETE — ACCESS DENIED';
+    fl.classList.add('show');
+    setTimeout(()=>fl.classList.remove('show'),2500);
+    return;
+  }
+  document.getElementById('btn-loader').classList.add('show');
+  setTimeout(()=>{
+    window.location.href='dashboard.html';
+  },2800);
+}
+
+// Enter key
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter') doLogin();
+});
+</script>
+</body>
+</html>
